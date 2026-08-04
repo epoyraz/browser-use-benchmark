@@ -19,29 +19,44 @@ OUTPUT_DIR = Path(__file__).parent / "official_plots"
 N_BOOTSTRAP = 1000
 EXPECTED_TASKS = 100
 
+# This plot answers exactly one question, the one the browser-use README asks
+# under "Open Source vs Cloud": what does a user get from the open-source
+# browser-use library, and what do they get from Browser Use Cloud?
+#
+# Deliberately NOT on this plot:
+#   - bcode / BrowserCode. It is a different product and it already has its own
+#     plot (browser_harness_by_model). It is also what Cloud v4 runs internally,
+#     so charting both is charting the same agent twice.
+#   - Claude Code and other third-party harnesses. They belong on
+#     best_of_frameworks_public. They were previously miscoloured here as
+#     "Old Harness (OSS)", which is wrong on both counts.
+#   - Cloud v3 / bu-ultra. Superseded by v4.
 MODEL_CATEGORIES: dict[str, str] = {
-    "bu-ultra": "cloud",
-    "bcode-claude-opus-4-7": "browser-harness",
+    "bu-v4-luna": "cloud",
+    "bu-v4-opus-4-8": "cloud",
 }
 
 DISPLAY_NAMES: dict[str, str] = {
-    "bu-ultra": "Cloud\nbu-ultra",
-    "ChatBrowserUse-2": "OSS +\nBU LLM",
-    "gemini-3-1-pro-preview": "gemini-3-1-pro",
-    "grok-4.20-openrouter": "grok-4.20",
-    "qwen3.6-plus-openrouter": "qwen3.6-plus",
-    "kimi-k2.6-fireworks": "kimi-k2.6",
-    "deepseek-v4-pro-fireworks": "deepseek-v4-pro",
-    "bcode-claude-opus-4-7": "bcode\nopus-4-7",
-    "claude-sonnet-4-6-cch": "ClaudeCode\nsonnet-4-6",
-    "claude-opus-4-6-cch": "ClaudeCode\nopus-4-6",
-    "claude-opus-4-7-cch": "ClaudeCode\nopus-4-7",
+    # v4 defaults to gpt-5.6-luna at reasoning effort xhigh
+    # (cloud/backend/common/v4_models.py), so this bar is the out-of-box
+    # configuration -- no params passed.
+    "bu-v4-luna": "Cloud v4\n(default)",
+    "bu-v4-opus-4-8": "Cloud v4\nOpus 4.8",
+    # Out-of-box luna in the library: no reasoning_effort passed, which means
+    # 'low' -- ChatOpenAI hardcodes that default (browser_use/llm/openai/chat.py
+    # :39). Unqualified on the plot because it is what you get with no config.
+    #
+    # Effort does not move it. Sweeping all four settings at 100 tasks each gave
+    # low 31% (9abf331b), medium 39% (17732129), high 34% (e89a24b7), xhigh 35%
+    # (963d81f3), while two runs of the same 'low' config differ by 5pp (26% /
+    # 31%) -- the spread across the sweep is no bigger than the run-to-run noise.
+    # So this bar is not a worst-case pick; luna's ceiling here is ~39%.
+    "gpt-5.6-luna": "Luna",
 }
 
 CATEGORY_LABELS: dict[str, str] = {
-    "cloud": "Cloud",
-    "browser-harness": "Browser Harness (OSS)",
-    "oss": "Old Harness (OSS)",
+    "cloud": "Browser Use Cloud",
+    "oss": "Open Source Library",
 }
 
 
@@ -190,14 +205,21 @@ def apply_theme(ax, theme: Theme):
     ax.set_axisbelow(True)
 
 
-def add_category_legend(ax, theme: Theme):
-    """Add a color-coded legend showing Cloud / OSS + Cloud LLM / Open Source."""
+def add_category_legend(ax, theme: Theme, categories: list[str]):
+    """Legend for the categories actually plotted.
+
+    Driven by the data rather than a fixed list: a hardcoded list draws a
+    swatch for a category with no bars, which is what happened when the
+    browser-harness bar was dropped.
+    """
+    order = ["cloud", "browser-harness", "oss"]
+    present = [c for c in order if c in categories]
     patches = [
         mpatches.Patch(
             color=getattr(theme, CATEGORY_COLOR_ATTR[cat]),
             label=CATEGORY_LABELS[cat],
         )
-        for cat in ["cloud", "browser-harness", "oss"]
+        for cat in present
     ]
     legend = ax.legend(
         handles=patches,
@@ -276,7 +298,7 @@ def plot_accuracy_by_model(results: dict[str, list[dict]], theme: Theme):
     ax.set_ylim(max(0, min(vals) - 7), max(vals) + 5)
 
     apply_theme(ax, theme)
-    add_category_legend(ax, theme)
+    add_category_legend(ax, theme, [get_category(m) for m in results])
     fig.tight_layout()
     ax.text(
         0.5,
@@ -360,7 +382,7 @@ def plot_accuracy_vs_throughput(results: dict[str, list[dict]], theme: Theme):
     ax.set_ylim(max(0, min(accs) - 10), max(accs) + 10)
 
     apply_theme(ax, theme)
-    add_category_legend(ax, theme)
+    add_category_legend(ax, theme, [get_category(m) for m in results])
     fig.tight_layout()
     ax.text(
         0.5,
