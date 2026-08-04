@@ -42,9 +42,16 @@ DISPLAY_NAMES: dict[str, str] = {
     # configuration -- no params passed.
     "bu-v4-luna": "Cloud v4\n(default)",
     "bu-v4-opus-4-8": "Cloud v4\nOpus 4.8",
-    # Effort-matched to the Cloud v4 default so the luna pair isolates the
-    # harness rather than the reasoning-effort setting.
-    "gpt-5.6-luna-xhigh": "gpt-5.6-luna\n(xhigh)",
+    # Out-of-box luna in the library: no reasoning_effort passed, which means
+    # 'low' -- ChatOpenAI hardcodes that default (browser_use/llm/openai/chat.py
+    # :39). Unqualified on the plot because it is what you get with no config.
+    #
+    # Effort does not move it. Sweeping all four settings at 100 tasks each gave
+    # low 31% (9abf331b), medium 39% (17732129), high 34% (e89a24b7), xhigh 35%
+    # (963d81f3), while two runs of the same 'low' config differ by 5pp (26% /
+    # 31%) -- the spread across the sweep is no bigger than the run-to-run noise.
+    # So this bar is not a worst-case pick; luna's ceiling here is ~39%.
+    "gpt-5.6-luna": "Luna",
 }
 
 CATEGORY_LABELS: dict[str, str] = {
