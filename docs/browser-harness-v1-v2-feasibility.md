@@ -1,8 +1,10 @@
 # Browser Harness v1/v2 Benchmark Feasibility Study
 
-Status: proposed design, no implementation in this change
+Status: implemented by `run_harness_comparison.py`
 
 Reviewed: 2026-08-22
+
+Implemented: 2026-08-23
 
 Benchmark revision: `bc6fd7849aa102c4204509de0a83da680212b22d`
 
@@ -17,11 +19,20 @@ as variables. Browser Harness is different: the harness-backed adapters currentl
 assume the historical Python harness layout, command, system prompt, browser
 provisioning functions, and working directory.
 
-The recommended design is a paired A/B runner in which the agent, model, browser
-provider, tasks, limits, judge, and prompt policy are fixed while a first-class
+The implemented design is a paired A/B runner in which the agent, model, local
+browser, tasks, limits, judge, and prompt policy are fixed while a first-class
 `HarnessSpec` selects either v1 or v2. Each harness should run from a clean,
 pinned checkout and its own virtual environment. Browser provisioning should be
 owned by the benchmark rather than either harness.
+
+The implementation intentionally uses only the installed Codex and Claude CLIs
+with their saved subscription logins. It removes API credentials from child
+environments and launches a fresh local Chromium process for every cell; there is
+no model SDK or browser-provider API path in this runner. It also removes nested
+CLI session identifiers and Browser Use cloud selectors, isolates the harness's saved
+cloud-auth path, disables Codex hosted web/apps and subagents, uses Claude safe mode,
+and installs a fixed workspace instruction override so ambient personal browser
+guidance cannot select the treatment.
 
 A read-only task slice should be the first reported comparison. Browser Harness
 v2 mechanically blocks form submission and mutating page requests by default, so
@@ -103,18 +114,19 @@ model. They do not contain a harness name, harness revision, skill digest, agent
 CLI version, or judge model. V1 and v2 runs using the same other axes would share
 one result filename and could not be audited reliably later.
 
-### Parallel screenshot collection is unsafe
+### Parallel screenshot collection in the legacy adapters is unsafe
 
 Every harness-backed task process deletes and recreates `/tmp/shots`. With
 `--parallel` greater than one, tasks can erase or collect each other's evidence.
-The initial A/B command should force `--parallel 1`; a production implementation
-must give every comparison cell a unique screenshot directory.
+The dedicated comparison runner does not use that shared path: every cell has a
+unique screenshot directory, and parallel scheduling operates on independent task
+pairs while keeping the v1/v2 arms of each pair sequential.
 
-## Proposed design
+## Implemented design
 
 ### 1. Add a first-class harness descriptor
 
-Create a shared module such as `frameworks/harness_variants.py`:
+The shared `frameworks/harness_variants.py` module provides:
 
 ```python
 @dataclass(frozen=True)
@@ -130,7 +142,7 @@ class HarnessSpec:
     screenshot_example: str
 ```
 
-The initial registry would describe:
+The registry describes:
 
 | Contract | v1 | v2 |
 | --- | --- | --- |
@@ -148,24 +160,25 @@ whatever happens to be installed in the benchmark environment.
 
 ### 2. Move browser lifecycle ownership into the benchmark
 
-Use the existing Browser Use Cloud provider to create a fresh browser independently
-of either harness:
+The implementation creates a fresh benchmark-owned local Chromium process independently
+of either harness. This differs from the original cloud-provider proposal so the comparison
+can run entirely from Codex and Claude subscriptions without any API key:
 
-1. call the benchmark provider and retain its browser id and CDP URL;
+1. launch local Chromium with an ephemeral profile and retain its CDP URL;
 2. create a unique daemon name containing comparison id, harness, repetition, and
    task id;
 3. export the same browser configuration and `BU_CDP_URL` to the selected harness;
 4. prewarm the selected daemon before starting measured agent time;
 5. run the agent;
-6. stop the browser through the benchmark provider;
+6. stop the exact benchmark-owned browser process tree;
 7. wait for the harness daemon to exit and verify that its endpoint is gone.
 
 This holds browser provisioning constant and prevents v1's convenience API from
 becoming an unintentional part of the treatment.
 
-Each A/B arm should receive a separate fresh browser with the same provider
-configuration. Sharing a browser between arms would leak cookies, tabs, history,
-and mutations from the first arm into the second.
+Each A/B arm receives a separate fresh browser with the same local configuration.
+Sharing a browser between arms would leak cookies, tabs, history, and mutations from
+the first arm into the second.
 
 ### 3. Use an isolated agent workspace
 
@@ -216,7 +229,7 @@ Every run and task artifact should include:
     "params": {}
   },
   "browser": {
-    "provider": "browser-use-cloud",
+    "provider": "benchmark-owned-local-chromium",
     "config": {}
   },
   "judge": {
@@ -235,29 +248,41 @@ Every run and task artifact should include:
 Result filenames should include a comparison id rather than trying to encode all
 of this state into a filename. The manifest becomes the source of truth.
 
-## Proposed command
+## Implemented command
 
-The recommended public interface after implementation is:
+First validate both checkouts, CLI subscription logins, browser discovery, and the fully
+resolved manifest without spending model time:
 
 ```bash
-uv run python run_framework_eval.py \
-  --framework codex-harness \
+uv run python run_harness_comparison.py \
+  --harnesses v1=../v1,v2=../v2 \
+  --expected-shas v1=41108b8676d4bdb58b26ab3b079c0b7b0f8f3926,v2=7cc604a50c7458e880156ea24f016d9431d86f6f \
+  --agents codex,claude \
+  --dry-run
+```
+
+Then run a paired read-only comparison:
+
+```bash
+uv run python run_harness_comparison.py \
   --harnesses v1=../v1,v2=../v2 \
   --benchmark BU_Bench_V1 \
   --task-category WebBenchREAD \
-  --browser browser-use-cloud \
-  --model gpt-5 \
-  --judge-model gemini-2.5-flash \
+  --agents codex,claude \
+  --judge claude \
+  --tasks 20 \
   --repeats 3 \
   --paired-order alternate \
-  --parallel 1 \
-  --task-timeout 1800 \
-  --params sandbox=danger-full-access
+  --parallel 3 \
+  --task-timeout 1800
 ```
 
-This command is a proposed interface and does not work in the current revision.
+Use `--execution-mode sequential` (the default) or `--parallel N`. Parallelism is
+applied to independent task pairs; the v1 and v2 arms of one pair never overlap.
+`--codex-model`, `--claude-model`, and `--judge-model` override CLI defaults without
+changing the saved-login authentication path.
 
-The runner should print the fully resolved comparison manifest and require explicit
+The runner prints the fully resolved comparison manifest and requires explicit
 confirmation or a `--yes` flag if either checkout is dirty, unpinned, or does not
 match the requested revision.
 
@@ -307,7 +332,8 @@ Also report:
 - wall-clock duration;
 - agent turns and command executions;
 - input, cached input, output, and reasoning tokens where available;
-- cost under one captured price table;
+- CLI-reported token counts and cost estimate when available (informational only for
+  subscription runs);
 - screenshot count;
 - technical failure class;
 - safety refusal count;
@@ -318,11 +344,15 @@ noisy. Use at least three repetitions for a report intended to support a product
 Alternating pair order reduces temporal bias but cannot eliminate website drift or model
 nondeterminism.
 
-## Implementation sequence
+## Rollout sequence
+
+Implementation and local smoke validation cover steps 1–6. The larger pilot and CI
+work in steps 7–10 remain deliberate follow-up operations; they are not run
+automatically because they consume subscription model time.
 
 1. Add `HarnessSpec`, validation, provenance capture, and isolated workspaces.
-2. Decouple Browser Use Cloud provisioning from v1 `admin` imports.
-3. Support the harness dimension in one adapter, preferably Codex or Claude Code.
+2. Decouple local Chromium provisioning from v1 `admin` imports.
+3. Support the harness dimension in both Codex and Claude Code CLI adapters.
 4. Namespace screenshots and daemon names; add teardown verification.
 5. Add paired execution and comparison output.
 6. Run a one-task smoke test for both harnesses.
@@ -331,27 +361,25 @@ nondeterminism.
 9. Generalize the shared lifecycle to the other two harness-backed adapters.
 10. Add or extend GitHub Actions only after the local paired path is stable.
 
-## Validation requirements
+## Validation
 
-Unit tests should prove that:
+Unit tests cover:
 
 - selecting v1 and v2 resolves different commands, roots, skills, and versions;
-- `--framework-ref` or its replacement affects execution rather than metadata only;
-- an unknown or dirty harness root fails before spending browser or model budget;
-- both cells receive identical fixed-axis configuration;
-- screenshot and daemon paths are unique under parallel execution;
-- result identities cannot collide across harnesses or revisions;
-- cleanup runs after agent startup failure, timeout, cancellation, and normal completion;
-- the proposed paired ordering is deterministic from its recorded configuration.
+- dirty or revision-mismatched roots failing before CLI execution;
+- removal of model credentials, nested-session state, and browser cloud selectors;
+- subscription-safe Codex and Claude command construction;
+- deterministic pairing, alternating arm order, and non-colliding cell identities;
+- complete fixed-axis manifest identity; and
+- paired quality, duration, and token aggregation.
 
-Real-browser validation should then demonstrate:
+No-model real-browser smoke validation demonstrated:
 
-- one fresh Browser Use Cloud browser per arm;
-- successful v1 and v2 attachment through the same provider path;
+- one fresh local Chromium browser per arm;
+- successful v1 and v2 attachment through the same benchmark-owned CDP path;
 - a simple navigation and screenshot from each harness;
-- no leaked browsers or daemon endpoints after completion;
-- correct v2 target continuity in a bounded multi-process check;
-- task artifacts whose screenshots and metadata belong to the expected cell.
+- separate-process prewarm and browser operations; and
+- no leaked browsers or daemon endpoints after completion.
 
 ## Effort and risk
 

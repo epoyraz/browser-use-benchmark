@@ -178,6 +178,75 @@ Important: `run_data/` traces include decrypted task text, ground truth, model
 outputs, and screenshots. They are gitignored for local verification only. Do
 not publish or commit them.
 
+### Comparing Browser Harness v1 and v2 with Local Subscriptions
+
+`run_harness_comparison.py` runs paired v1/v2 cells through the locally installed
+Codex and Claude CLIs. It does not import a model SDK, accept a model API key, or use
+a browser-provider API. Before any browser or model is launched, it verifies that
+Codex reports ChatGPT login and Claude reports a first-party subscription login. Child
+processes have `*_API_KEY`, provider-routing, and explicit auth-token variables
+removed; saved CLI login state remains available. Parent Codex/Claude session
+identifiers and Browser Use cloud selectors are removed as well, while the harness's
+saved cloud-auth path is replaced with an empty per-cell location. Claude runs in safe
+mode; Codex disables web search, apps, hooks, memories, and subagents, and receives the
+benchmark policy as developer instructions. A fixed workspace `AGENTS.override.md`
+supersedes browser-specific global personalization, whose digest is recorded in the
+manifest.
+
+Prerequisites:
+
+```bash
+codex login
+claude auth login
+uv sync
+```
+
+The defaults expect clean harness checkouts at `../v1` and `../v2`. Prepare their
+separate virtual environments and validate the complete plan without spending model
+time:
+
+```bash
+uv run python run_harness_comparison.py \
+  --prepare-harnesses \
+  --expected-shas v1=41108b8676d4bdb58b26ab3b079c0b7b0f8f3926,v2=7cc604a50c7458e880156ea24f016d9431d86f6f \
+  --dry-run
+```
+
+Run one read-only task sequentially with both agents and a fixed local Claude judge:
+
+```bash
+uv run python run_harness_comparison.py \
+  --task-category WebBenchREAD \
+  --tasks 1 \
+  --agents codex,claude \
+  --judge claude \
+  --execution-mode sequential
+```
+
+Run independent task pairs in parallel while keeping the v1/v2 arms within each pair
+sequential:
+
+```bash
+uv run python run_harness_comparison.py \
+  --task-category WebBenchREAD \
+  --tasks 20 \
+  --repeats 3 \
+  --paired-order alternate \
+  --parallel 3
+```
+
+Every cell gets a fresh local Chromium profile, isolated workspace, selected native
+`SKILL.md`, harness daemon, screenshot directory, and trace. Results are written under
+`run_data/harness_comparisons/<comparison-id>/`: `comparison.md` gives paired pass/fail
+outcomes, per-task and aggregate timings, and v2-minus-v1 timing deltas;
+`comparison.json` and each cell's `result.json` retain phase timings, turns, commands,
+tokens, screenshots, failures, safety refusals, CAPTCHA/impossible flags, and full
+provenance. Use `--judge none` to measure without an extra subscription model call; those
+runs are intentionally unscored.
+
+See [`docs/browser-harness-v1-v2-feasibility.md`](docs/browser-harness-v1-v2-feasibility.md)
+for the experimental boundary and interpretation guidance.
+
 ### Swapping Models
 
 Edit `run_eval.py` to change the model:
