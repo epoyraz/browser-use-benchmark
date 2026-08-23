@@ -38,6 +38,17 @@ def test_v1_v2_resolve_to_distinct_contracts(tmp_path, monkeypatch):
     assert specs["v1"].daemon_command("x") != specs["v2"].daemon_command("x")
 
 
+def test_v2_can_be_resolved_without_v1(tmp_path, monkeypatch):
+    v2 = _fake_root(tmp_path, "v2", "browser-harness-v2", "bh")
+    monkeypatch.setattr(variants, "_git_metadata", lambda _root: ("2" * 40, False))
+    monkeypatch.setattr(variants, "_run", lambda command, timeout=30: "cli 1.2.3")
+
+    specs = variants.resolve_harnesses({"v2": str(v2)})
+
+    assert list(specs) == ["v2"]
+    assert specs["v2"].command_name == "bh"
+
+
 def test_dirty_checkout_fails_before_cli_execution(tmp_path, monkeypatch):
     root = _fake_root(tmp_path, "v1", "browser-harness", "browser-harness")
     monkeypatch.setattr(variants, "_git_metadata", lambda _root: ("a" * 40, True))
@@ -52,6 +63,24 @@ def test_dirty_checkout_fails_before_cli_execution(tmp_path, monkeypatch):
     with pytest.raises(variants.HarnessValidationError, match="dirty"):
         variants.resolve_harness("v1", root)
     assert called is False
+
+
+def test_allowed_dirty_checkout_records_a_worktree_fingerprint(tmp_path, monkeypatch):
+    root = _fake_root(tmp_path, "v2", "browser-harness-v2", "bh")
+    monkeypatch.setattr(variants, "_git_metadata", lambda _root: ("a" * 40, True))
+    monkeypatch.setattr(
+        variants,
+        "_worktree_fingerprint",
+        lambda _root: ("d" * 64, 1234, "s" * 64),
+    )
+    monkeypatch.setattr(variants, "_run", lambda command, timeout=30: "0.1.0")
+
+    spec = variants.resolve_harness("v2", root, allow_dirty=True)
+
+    assert spec.dirty is True
+    assert spec.worktree_diff_sha256 == "d" * 64
+    assert spec.worktree_diff_bytes == 1234
+    assert spec.worktree_status_sha256 == "s" * 64
 
 
 def test_expected_revision_changes_validation(tmp_path, monkeypatch):

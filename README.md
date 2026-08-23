@@ -178,12 +178,12 @@ Important: `run_data/` traces include decrypted task text, ground truth, model
 outputs, and screenshots. They are gitignored for local verification only. Do
 not publish or commit them.
 
-### Comparing Browser Harness v1 and v2 with Local Subscriptions
+### Running Browser Harness Comparisons and Telemetry with Local Subscriptions
 
-`run_harness_comparison.py` runs paired v1/v2 cells through the locally installed
-Codex and Claude CLIs. It does not import a model SDK, accept a model API key, or use
-a browser-provider API. Before any browser or model is launched, it verifies that
-Codex reports ChatGPT login and Claude reports a first-party subscription login. Child
+`run_harness_comparison.py` runs v1, v2, or paired v1/v2 cells through the locally
+installed Codex and Claude CLIs. It does not import a model SDK, accept a model API key,
+or use a browser-provider API. Before any browser or model is launched, it verifies the
+subscription login for every selected CLI. Child
 processes have `*_API_KEY`, provider-routing, and explicit auth-token variables
 removed; saved CLI login state remains available. Parent Codex/Claude session
 identifiers and Browser Use cloud selectors are removed as well, while the harness's
@@ -193,12 +193,43 @@ benchmark policy as developer instructions. A fixed workspace `AGENTS.override.m
 supersedes browser-specific global personalization, whose digest is recorded in the
 manifest.
 
-Prerequisites:
+Prerequisites (install and authenticate only the CLIs selected for a run):
 
 ```bash
 codex login
 claude auth login
 uv sync
+```
+
+Run v2 only with a Codex contestant and judge, fail closed if another CLI is selected,
+and capture action recordings, sanitized CDP round trips, bounded page diagnostics, and
+one-second owned-process samples:
+
+```bash
+uv run python run_harness_comparison.py \
+  --harnesses v2=../v2 \
+  --agents codex \
+  --codex-only \
+  --codex-model gpt-5.6-luna \
+  --codex-effort max \
+  --judge codex \
+  --judge-model gpt-5.6-luna \
+  --judge-effort max \
+  --task-category all \
+  --task-indices 1,2,3,4,5 \
+  --parallel 3 \
+  --extensive-telemetry
+```
+
+When a controlled network probe establishes that ordinary search providers are blocked,
+record a working HTML search page as an explicit prompt axis instead of silently changing
+agent instructions. The placeholder is replaced by the agent with a URL-encoded query and
+all navigation still goes through the selected harness:
+
+```bash
+uv run python run_harness_comparison.py \
+  ... \
+  --search-endpoint 'https://search.example/search?q={query}'
 ```
 
 The defaults expect clean harness checkouts at `../v1` and `../v2`. Prepare their
@@ -237,15 +268,38 @@ uv run python run_harness_comparison.py \
 
 Every cell gets a fresh local Chromium profile, isolated workspace, selected native
 `SKILL.md`, harness daemon, screenshot directory, and trace. Results are written under
-`run_data/harness_comparisons/<comparison-id>/`: `comparison.md` gives paired pass/fail
-outcomes, per-task and aggregate timings, and v2-minus-v1 timing deltas;
+`run_data/harness_comparisons/<comparison-id>/`: `comparison.md` gives per-task and
+aggregate outcomes and timings, plus paired outcomes and v2-minus-v1 deltas when both
+harnesses were selected;
 `comparison.json` and each cell's `result.json` retain phase timings, turns, commands,
 tokens, screenshots, failures, safety refusals, CAPTCHA/impossible flags, and full
-provenance. Use `--judge none` to measure without an extra subscription model call; those
-runs are intentionally unscored.
+provenance. With `--extensive-telemetry`, each result also contains rollups for harness
+invocations, helpers, CDP methods/latencies/bytes, diagnostics, recordings, and owned
+process trees; raw privacy-safe artifacts remain beside the cell. Use `--judge none` to
+measure without an extra subscription model call; those runs are intentionally unscored.
+
+Model and reasoning effort are separate recorded axes. Use `--codex-model`,
+`--claude-model`, and `--judge-model` for model selection, plus `--codex-effort`,
+`--claude-effort`, and `--judge-effort` when the run must not inherit CLI defaults.
+
+Reports retain strict judge scores only as raw audit evidence. If any cell reaches a
+CAPTCHA or human-verification wall, the entire task is excluded from scored aggregates,
+paired outcomes, and paired timing across every agent, harness, and repetition in that
+run. Impossible-task blockers remain excluded at the affected pair level. Reports list
+the excluded tasks, pair-order diagnostics, judge failure reasons, and validity warnings
+so live-site blocking is not mistaken for a harness-quality result. Task agents must stop
+at CAPTCHA/human-verification walls after saving one evidence screenshot; blocked cells
+are not allowed to spend time solving them.
 
 See [`docs/browser-harness-v1-v2-feasibility.md`](docs/browser-harness-v1-v2-feasibility.md)
 for the experimental boundary and interpretation guidance.
+
+### Benchmark Journal
+
+Reviewable reports and privacy-safe aggregate evidence live in [`journal/`](journal/). Raw
+`run_data/` remains local and ignored because it contains decrypted task content and model
+trajectories. Journal entries preserve negative and excluded experiments as well as successful
+runs, with their interpretation boundaries stated alongside the artifacts.
 
 ### Swapping Models
 

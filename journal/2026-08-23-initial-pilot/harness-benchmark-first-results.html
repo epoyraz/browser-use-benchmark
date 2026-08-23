@@ -1,0 +1,490 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:,">
+  <title>Browser Harness Benchmark — First Results</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f5f7fb;
+      --panel: #ffffff;
+      --panel-soft: #eef3fa;
+      --text: #182236;
+      --muted: #5d687b;
+      --line: #d8dfeb;
+      --blue: #2563eb;
+      --green: #178653;
+      --orange: #d87812;
+      --red: #c43b45;
+      --purple: #7655d6;
+      --ink: #0f172a;
+      --shadow: 0 16px 44px rgba(30, 48, 80, .10);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0d1320;
+        --panel: #151d2c;
+        --panel-soft: #1b2638;
+        --text: #edf3ff;
+        --muted: #aeb9cc;
+        --line: #334157;
+        --blue: #75a7ff;
+        --green: #5dd49b;
+        --orange: #f2aa55;
+        --red: #ff7f8a;
+        --purple: #ae98ff;
+        --ink: #f7f9ff;
+        --shadow: 0 16px 44px rgba(0, 0, 0, .28);
+      }
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 16px/1.55 ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    a { color: var(--blue); }
+    code {
+      font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+      font-size: .92em;
+      overflow-wrap: anywhere;
+    }
+    .shell { width: min(1180px, calc(100% - 32px)); margin: 0 auto; }
+    .hero {
+      padding: 64px 0 50px;
+      background:
+        radial-gradient(circle at 88% 18%, color-mix(in srgb, var(--purple) 26%, transparent), transparent 32%),
+        radial-gradient(circle at 6% 90%, color-mix(in srgb, var(--blue) 22%, transparent), transparent 38%),
+        var(--panel);
+      border-bottom: 1px solid var(--line);
+    }
+    .eyebrow {
+      margin: 0 0 10px;
+      color: var(--blue);
+      font-size: .78rem;
+      font-weight: 700;
+      letter-spacing: .13em;
+      text-transform: uppercase;
+    }
+    h1, h2, h3 { line-height: 1.18; letter-spacing: -.025em; }
+    h1 { max-width: 900px; margin: 0; font-size: clamp(2.35rem, 6vw, 4.9rem); }
+    h2 { margin: 0 0 18px; font-size: clamp(1.55rem, 3vw, 2.25rem); }
+    h3 { margin: 0 0 8px; font-size: 1.08rem; }
+    .subtitle { max-width: 850px; margin: 20px 0 0; color: var(--muted); font-size: 1.12rem; }
+    .meta { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 24px; }
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 6px 10px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--panel) 82%, transparent);
+      color: var(--muted);
+      font-size: .84rem;
+    }
+    .tag::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--blue); }
+    main { padding: 36px 0 72px; }
+    section { margin-top: 56px; }
+    .verdict {
+      display: grid;
+      grid-template-columns: 1.4fr .8fr;
+      gap: 22px;
+      padding: 26px;
+      border: 1px solid var(--line);
+      border-left: 7px solid var(--orange);
+      border-radius: 18px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+    }
+    .verdict p { margin: 8px 0 0; }
+    .verdict .stamp {
+      display: grid;
+      place-items: center;
+      min-height: 130px;
+      padding: 18px;
+      border-radius: 14px;
+      background: var(--panel-soft);
+      text-align: center;
+    }
+    .stamp strong { display: block; color: var(--orange); font-size: 1.55rem; }
+    .stamp span { color: var(--muted); font-size: .9rem; }
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 14px;
+      margin-top: 22px;
+    }
+    .metric {
+      min-width: 0;
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: var(--panel);
+    }
+    .metric b { display: block; font-size: clamp(1.35rem, 3vw, 2rem); line-height: 1; }
+    .metric span { display: block; margin-top: 8px; color: var(--muted); font-size: .83rem; }
+    .callout {
+      padding: 18px 20px;
+      border-radius: 12px;
+      background: color-mix(in srgb, var(--orange) 12%, var(--panel));
+      border: 1px solid color-mix(in srgb, var(--orange) 42%, var(--line));
+    }
+    .callout strong { color: var(--orange); }
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+    .panel {
+      padding: 22px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: var(--panel);
+    }
+    .panel p:last-child { margin-bottom: 0; }
+    .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); }
+    table { width: 100%; border-collapse: collapse; min-width: 820px; }
+    th, td { padding: 12px 14px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { background: var(--panel-soft); color: var(--muted); font-size: .76rem; letter-spacing: .06em; text-transform: uppercase; }
+    tr:last-child td { border-bottom: 0; }
+    td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+    .status { font-weight: 700; white-space: nowrap; }
+    .pass { color: var(--green); }
+    .fail { color: var(--red); }
+    .blocked { color: var(--orange); }
+    figure { margin: 0; }
+    .chart {
+      padding: 22px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: var(--panel);
+    }
+    .chart svg { display: block; width: 100%; height: auto; }
+    .chart text { fill: var(--text); font-family: inherit; }
+    .chart .muted { fill: var(--muted); }
+    .chart .grid { stroke: var(--line); stroke-width: 1; }
+    .chart .frame { fill: none; stroke: var(--line); }
+    figcaption { margin-top: 12px; color: var(--muted); font-size: .88rem; }
+    .legend { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 12px; color: var(--muted); font-size: .84rem; }
+    .legend i { display: inline-block; width: 11px; height: 11px; margin-right: 6px; border-radius: 2px; vertical-align: -1px; }
+    .evidence-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+    .evidence {
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: var(--panel);
+    }
+    .evidence img { display: block; width: 100%; aspect-ratio: 16 / 10; object-fit: cover; object-position: top left; background: #000; }
+    .evidence .caption { padding: 15px 16px 17px; }
+    .evidence p { margin: 5px 0 0; color: var(--muted); font-size: .9rem; }
+    .sequence { display: grid; grid-template-columns: 1fr auto 1fr; gap: 12px; align-items: stretch; }
+    .sequence .arrow { align-self: center; color: var(--muted); font-size: 1.6rem; }
+    .sequence-card { padding: 18px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); }
+    .sequence-card .big { display: block; margin: 10px 0 4px; font-size: 2rem; font-weight: 750; }
+    .notes { margin: 0; padding-left: 21px; }
+    .notes li + li { margin-top: 9px; }
+    .foot {
+      margin-top: 60px;
+      padding-top: 22px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: .88rem;
+    }
+    @media (max-width: 900px) {
+      .metrics { grid-template-columns: repeat(2, 1fr); }
+      .verdict, .two-col { grid-template-columns: 1fr; }
+      .evidence-grid { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 620px) {
+      .shell { width: min(100% - 20px, 1180px); }
+      .hero { padding: 42px 0 34px; }
+      main { padding-top: 22px; }
+      section { margin-top: 42px; }
+      .metrics { grid-template-columns: 1fr 1fr; gap: 9px; }
+      .metric { padding: 14px; }
+      .sequence { grid-template-columns: 1fr; }
+      .sequence .arrow { transform: rotate(90deg); justify-self: center; }
+      .chart { padding: 12px; }
+    }
+    @media print {
+      :root { --bg: #fff; --panel: #fff; --panel-soft: #f3f5f8; --text: #111827; --muted: #4b5563; --line: #d1d5db; }
+      .hero { padding-top: 25px; }
+      .shell { width: 100%; }
+      .verdict, .panel, .metric, .chart, .evidence { box-shadow: none; break-inside: avoid; }
+      section { break-inside: avoid; }
+      a { color: inherit; text-decoration: none; }
+    }
+  </style>
+</head>
+<body>
+  <header class="hero">
+    <div class="shell">
+      <p class="eyebrow">Pilot report · 23 August 2026</p>
+      <h1>Browser Harness v1 vs v2: first benchmark results</h1>
+      <p class="subtitle">Claude Opus 5 and Codex GPT‑5.6 Terra at high reasoning, judged cell-by-cell by GPT‑5.6 Luna at max reasoning.</p>
+      <div class="meta">
+        <span class="tag">Comparison harness-pilot-20260823-t001</span>
+        <span class="tag">BU Bench V1 · WebBenchREAD</span>
+        <span class="tag">1 selected task · 0 scored tasks · 4 raw cells</span>
+        <span class="tag">Local headless Chrome · sequential</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="shell">
+    <section aria-labelledby="executive-heading">
+      <div class="verdict">
+        <div>
+          <p class="eyebrow">Executive conclusion</p>
+          <h2 id="executive-heading">The runner works; the only task is excluded.</h2>
+          <p>All four cells launched, produced auditable traces, were judged by the requested model, and cleaned up correctly. The only selected task triggered Cloudflare in two cells, so the task-wide CAPTCHA rule excludes all four cells from every benchmark score and timing comparison. The official result is therefore no score—not a 50% tie. The raw judge outcomes remain useful diagnostic evidence.</p>
+        </div>
+        <div class="stamp" aria-label="Publication status: exploratory only">
+          <div>
+            <strong>No benchmark score</strong>
+            <span>0 of 1 selected tasks remain after task-wide CAPTCHA exclusion.</span>
+          </div>
+        </div>
+      </div>
+      <div class="metrics" aria-label="Pilot headline metrics">
+        <div class="metric"><b>0 / 1</b><span>scored / selected tasks</span></div>
+        <div class="metric"><b>1</b><span>CAPTCHA-excluded task</span></div>
+        <div class="metric"><b>4 / 4</b><span>raw cells retained for audit</span></div>
+        <div class="metric"><b>2 / 4</b><span>raw audit passes</span></div>
+        <div class="metric"><b>17m 14.5s</b><span>wall-clock runtime</span></div>
+      </div>
+    </section>
+
+    <section aria-labelledby="validity-heading">
+      <h2 id="validity-heading">Validity finding</h2>
+      <div class="callout">
+        <strong>Task 0 is excluded across every model, harness, and repetition.</strong>
+        A CAPTCHA in any cell invalidates the whole task for comparison. Here Codex ran v1 first and v2 second; Claude ran v2 first and v1 second. Both order-0 cells passed without a challenge and both order-1 cells met Cloudflare. Those raw outcomes diagnose an order/site-state confound, but none contributes to the benchmark score.
+      </div>
+    </section>
+
+    <section aria-labelledby="method-heading">
+      <h2 id="method-heading">Method and provenance</h2>
+      <div class="two-col">
+        <div class="panel">
+          <h3>Fixed axes</h3>
+          <ul class="notes">
+            <li><strong>Codex contestant:</strong> Codex CLI 0.149.0, <code>gpt-5.6-terra</code>, reasoning <code>high</code>.</li>
+            <li><strong>Claude contestant:</strong> Claude Code 2.1.241, runtime-confirmed <code>claude-opus-5</code>, CLI-default effort.</li>
+            <li><strong>Judge:</strong> Codex CLI with <code>gpt-5.6-luna</code>, reasoning <code>max</code>, verified in all four judge logs.</li>
+            <li><strong>Browser:</strong> benchmark-owned Chrome SxS, headless, 1440×1000, fresh profile per cell.</li>
+            <li><strong>Execution:</strong> sequential; within-pair arms never overlapped; paired order alternated by agent.</li>
+          </ul>
+        </div>
+        <div class="panel">
+          <h3>Treatment and controls</h3>
+          <ul class="notes">
+            <li><strong>v1:</strong> commit <code>41108b8676d4bdb58b26ab3b079c0b7b0f8f3926</code>, package 0.1.9.</li>
+            <li><strong>v2:</strong> commit <code>7cc604a50c7458e880156ea24f016d9431d86f6f</code>, package 0.1.0.</li>
+            <li>Both checkouts were clean and matched the benchmark’s expected revisions.</li>
+            <li>Saved ChatGPT/Claude subscription logins were used; API credentials and browser-provider selectors were stripped from child environments.</li>
+            <li>Task plaintext is intentionally omitted here; the local trace remains the controlled source of truth.</li>
+          </ul>
+        </div>
+      </div>
+      <p style="color:var(--muted);font-size:.9rem">OpenAI’s official model pages confirm that <a href="https://developers.openai.com/api/docs/models/gpt-5.6-terra">GPT‑5.6 Terra</a> supports high reasoning and <a href="https://developers.openai.com/api/docs/models/gpt-5.6-luna">GPT‑5.6 Luna</a> supports max reasoning.</p>
+    </section>
+
+    <section aria-labelledby="results-heading">
+      <h2 id="results-heading">Per-cell results</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Agent</th><th>Harness</th><th class="num">Order</th><th>Raw audit result</th><th>Benchmark scoring</th>
+              <th class="num">Agent time</th><th class="num">Total time</th><th class="num">Turns</th>
+              <th class="num">Commands</th><th class="num">Shots</th><th>CAPTCHA</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>Codex Terra high</td><td>v1</td><td class="num">0</td><td class="status pass">Pass</td><td class="status blocked">Excluded</td><td class="num">263.8s</td><td class="num">279.2s</td><td class="num">1</td><td class="num">30</td><td class="num">3</td><td>No</td></tr>
+            <tr><td>Codex Terra high</td><td>v2</td><td class="num">1</td><td class="status fail">Fail</td><td class="status blocked">Excluded</td><td class="num">70.4s</td><td class="num">87.1s</td><td class="num">1</td><td class="num">6</td><td class="num">2</td><td class="status blocked">Yes</td></tr>
+            <tr><td>Claude Opus 5</td><td>v2</td><td class="num">0</td><td class="status pass">Pass</td><td class="status blocked">Excluded</td><td class="num">247.6s</td><td class="num">261.9s</td><td class="num">37</td><td class="num">18</td><td class="num">2</td><td>No</td></tr>
+            <tr><td>Claude Opus 5</td><td>v1</td><td class="num">1</td><td class="status fail">Fail*</td><td class="status blocked">Excluded</td><td class="num">391.6s</td><td class="num">406.2s</td><td class="num">56</td><td class="num">31</td><td class="num">2</td><td class="status blocked">Yes</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p style="color:var(--muted);font-size:.9rem">*Claude/v1 returned the same five names as the passing cells after clearing the challenge. All four rows are excluded because CAPTCHA was observed anywhere on this task; pass/fail values above are preserved only as raw judge evidence.</p>
+    </section>
+
+    <section aria-labelledby="timing-heading">
+      <h2 id="timing-heading">Timing by phase</h2>
+      <figure class="chart">
+        <div class="legend" aria-hidden="true">
+          <span><i style="background:var(--purple)"></i>Setup</span>
+          <span><i style="background:var(--blue)"></i>Agent</span>
+          <span><i style="background:var(--green)"></i>Teardown</span>
+          <span><i style="background:var(--orange)"></i>Judge</span>
+        </div>
+        <svg viewBox="0 0 980 300" role="img" aria-labelledby="timing-title timing-desc">
+          <title id="timing-title">Stacked runtime by benchmark cell</title>
+          <desc id="timing-desc">Claude v1 is longest at 406.2 seconds. Codex v2 is shortest at 87.1 seconds because it exits at a CAPTCHA. Setup and teardown are each under two seconds; most time is agent execution.</desc>
+          <rect class="frame" x="170" y="25" width="720" height="220"></rect>
+          <g class="grid">
+            <line x1="170" y1="25" x2="170" y2="245"></line>
+            <line x1="341.4" y1="25" x2="341.4" y2="245"></line>
+            <line x1="512.9" y1="25" x2="512.9" y2="245"></line>
+            <line x1="684.3" y1="25" x2="684.3" y2="245"></line>
+            <line x1="855.7" y1="25" x2="855.7" y2="245"></line>
+          </g>
+          <g font-size="12" class="muted">
+            <text x="170" y="266" text-anchor="middle">0</text>
+            <text x="341.4" y="266" text-anchor="middle">100</text>
+            <text x="512.9" y="266" text-anchor="middle">200</text>
+            <text x="684.3" y="266" text-anchor="middle">300</text>
+            <text x="855.7" y="266" text-anchor="middle">400</text>
+            <text x="530" y="290" text-anchor="middle">Elapsed seconds</text>
+          </g>
+          <g font-size="13">
+            <text x="158" y="60" text-anchor="end">Codex · v1 · pass</text>
+            <text x="158" y="112" text-anchor="end">Codex · v2 · CAPTCHA</text>
+            <text x="158" y="164" text-anchor="end">Claude · v2 · pass</text>
+            <text x="158" y="216" text-anchor="end">Claude · v1 · CAPTCHA</text>
+          </g>
+          <g>
+            <rect x="170" y="42" width="2.7" height="24" fill="var(--purple)"></rect>
+            <rect x="172.7" y="42" width="452.2" height="24" fill="var(--blue)"></rect>
+            <rect x="624.9" y="42" width="1.2" height="24" fill="var(--green)"></rect>
+            <rect x="626.1" y="42" width="22.6" height="24" fill="var(--orange)"></rect>
+            <text x="658" y="59" font-size="12">279.2s</text>
+
+            <rect x="170" y="94" width="1.5" height="24" fill="var(--purple)"></rect>
+            <rect x="171.5" y="94" width="120.7" height="24" fill="var(--blue)"></rect>
+            <rect x="292.2" y="94" width="1.2" height="24" fill="var(--green)"></rect>
+            <rect x="293.4" y="94" width="26.1" height="24" fill="var(--orange)"></rect>
+            <text x="329" y="111" font-size="12">87.1s</text>
+
+            <rect x="170" y="146" width="1.5" height="24" fill="var(--purple)"></rect>
+            <rect x="171.5" y="146" width="424.4" height="24" fill="var(--blue)"></rect>
+            <rect x="595.9" y="146" width="1.1" height="24" fill="var(--green)"></rect>
+            <rect x="597" y="146" width="22" height="24" fill="var(--orange)"></rect>
+            <text x="628" y="163" font-size="12">261.9s</text>
+
+            <rect x="170" y="198" width="2.3" height="24" fill="var(--purple)"></rect>
+            <rect x="172.3" y="198" width="671.3" height="24" fill="var(--blue)"></rect>
+            <rect x="843.6" y="198" width="1.4" height="24" fill="var(--green)"></rect>
+            <rect x="845" y="198" width="21.3" height="24" fill="var(--orange)"></rect>
+            <text x="875" y="215" font-size="12">406.2s</text>
+          </g>
+        </svg>
+        <figcaption>These are raw diagnostic timings only. The task-wide CAPTCHA rule excludes every bar from scored latency: one arm exited early at a challenge, while another spent more than five minutes recovering from it.</figcaption>
+      </figure>
+    </section>
+
+    <section aria-labelledby="order-heading">
+      <h2 id="order-heading">The dominant pattern: first versus second</h2>
+      <div class="sequence" aria-label="Order effect summary">
+        <div class="sequence-card">
+          <span class="eyebrow">Order 0 · first arm</span>
+          <span class="big pass">2 / 2 passed</span>
+          <span>0 CAPTCHA encounters · mean agent time 255.7s</span>
+        </div>
+        <div class="arrow" aria-hidden="true">→</div>
+        <div class="sequence-card">
+          <span class="eyebrow">Order 1 · second arm</span>
+          <span class="big blocked">2 / 2 CAPTCHA</span>
+          <span>0 raw audit passes · mean agent time 231.0s</span>
+        </div>
+      </div>
+      <p style="color:var(--muted)">Because v1 was first for Codex and v2 was first for Claude, the alternate ordering prevented one harness from receiving all first positions. It also revealed that the live site/IP state, rather than the harness label, dominated this sample.</p>
+    </section>
+
+    <section aria-labelledby="evidence-heading">
+      <h2 id="evidence-heading">Visual evidence</h2>
+      <div class="evidence-grid">
+        <article class="evidence">
+          <img src="harness-benchmark-assets/codex-v1-result.png" alt="Stack Exchange sites list sorted by Questions Per Day in the Codex v1 run">
+          <div class="caption"><h3>Codex · v1 · raw audit pass</h3><p>The saved final screenshot shows the expected ranking and activity values; the cell is excluded with its task.</p></div>
+        </article>
+        <article class="evidence">
+          <img src="harness-benchmark-assets/codex-v2-captcha.png" alt="Cloudflare security verification page in the Codex v2 run">
+          <div class="caption"><h3>Codex · v2 · blocked</h3><p>The second arm never reached the required list and accurately reported that it could not determine the answer.</p></div>
+        </article>
+        <article class="evidence">
+          <img src="harness-benchmark-assets/claude-v2-result.png" alt="Stack Exchange sites list sorted by Questions Per Day in the Claude v2 run">
+          <div class="caption"><h3>Claude · v2 · raw audit pass</h3><p>The first Claude arm reached the same ranking and returned names plus activity values; the cell is excluded with its task.</p></div>
+        </article>
+        <article class="evidence">
+          <img src="harness-benchmark-assets/claude-v1-captcha.png" alt="Cloudflare human verification checkbox in the Claude v1 run">
+          <div class="caption"><h3>Claude · v1 · challenge encountered</h3><p>The second Claude arm hit the same site defense seen by Codex/v2.</p></div>
+        </article>
+        <article class="evidence" style="grid-column:1/-1">
+          <img src="harness-benchmark-assets/claude-v1-result.png" alt="Stack Exchange sites list reached after the Cloudflare challenge in the Claude v1 run" style="aspect-ratio:16/8">
+          <div class="caption"><h3>Claude · v1 · correct answer recovered, raw verdict still 0</h3><p>The final evidence shows the correct ranking after the challenge. Luna noted that the names were correct, then applied the cell-level judge rule; task-wide reporting excludes the entire task regardless.</p></div>
+        </article>
+      </div>
+    </section>
+
+    <section aria-labelledby="judge-heading">
+      <h2 id="judge-heading">Judge behavior and score interpretation</h2>
+      <div class="two-col">
+        <div class="panel">
+          <h3>What Luna judged correctly</h3>
+          <ul class="notes">
+            <li>Both passing cells had evidence showing the selected activity sort and the expected five-item ranking.</li>
+            <li>Codex/v2 was correctly marked incomplete because the list was never retrieved.</li>
+            <li>Claude/v1’s final names were recognized as correct.</li>
+            <li>All four structured judgements parsed successfully; there were no judge errors.</li>
+          </ul>
+        </div>
+        <div class="panel">
+          <h3>Scoring policy now applied</h3>
+          <ul class="notes">
+            <li>Strict cell verdicts are retained as raw audit evidence, not benchmark scores.</li>
+            <li>If any cell reaches CAPTCHA/human verification, the entire task is excluded across all agents, harnesses, and repetitions.</li>
+            <li>That rule excludes all four pilot cells and both paired timing deltas.</li>
+            <li>The raw 50%/50% split is diagnostic only; zero tasks remain scored.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section aria-labelledby="resources-heading">
+      <h2 id="resources-heading">Trajectory and resource signals</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Cell</th><th class="num">Commands</th><th class="num">Screenshots</th><th>Token signal</th><th>Interpretation</th></tr></thead>
+          <tbody>
+            <tr><td>Codex · v1</td><td class="num">30</td><td class="num">3</td><td>837,963 input; 777,728 cached; 8,449 output; 2,613 reasoning</td><td>Successful but long, command-heavy trajectory.</td></tr>
+            <tr><td>Codex · v2</td><td class="num">6</td><td class="num">2</td><td>152,728 input; 116,224 cached; 1,531 output; 387 reasoning</td><td>Early exit at challenge; not a fair speed comparison.</td></tr>
+            <tr><td>Claude · v2</td><td class="num">18</td><td class="num">2</td><td>66,015 cache-created; 755,529 cache-read; 215 output</td><td>Successful, fewer harness calls than the other successful cell.</td></tr>
+            <tr><td>Claude · v1</td><td class="num">31</td><td class="num">2</td><td>58,795 cache-created; 1,021,592 cache-read; 342 output</td><td>Challenge recovery dominated the trajectory.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p style="color:var(--muted);font-size:.9rem">Codex and Claude expose different token accounting fields; cross-vendor token totals are not directly comparable. Within-vendor comparisons are also confounded here by CAPTCHA and early exit.</p>
+    </section>
+
+    <section aria-labelledby="mechanics-heading">
+      <h2 id="mechanics-heading">Mechanical benchmark health</h2>
+      <div class="metrics">
+        <div class="metric"><b class="pass">0</b><span>technical failures</span></div>
+        <div class="metric"><b class="pass">0</b><span>judge errors</span></div>
+        <div class="metric"><b class="pass">0</b><span>safety refusals</span></div>
+        <div class="metric"><b>9</b><span>saved screenshots</span></div>
+        <div class="metric"><b class="pass">Clean</b><span>browser/daemon teardown</span></div>
+      </div>
+      <p>The benchmark successfully isolated workspaces, Chrome profiles, screenshots, harness daemons, and provenance. No process from this comparison remained after completion. The reporting layer now also applies task-wide CAPTCHA exclusion, preventing clean cells from the same contaminated task from leaking into aggregate score or timing.</p>
+    </section>
+
+    <section aria-labelledby="bottom-line-heading">
+      <h2 id="bottom-line-heading">Bottom line</h2>
+      <div class="panel">
+        <p><strong>Do not publish a v1-versus-v2 score or winner from this run.</strong> The defensible result is: the paired runner executed correctly; the sole selected task triggered CAPTCHA and is excluded in full; zero tasks remain scored; and the four raw cell outcomes are retained only to diagnose the strong second-arm site-state effect.</p>
+        <p>Recommended actions and a staged next-run design are documented in <a href="harness-benchmark-improvement-plan.html">the benchmark improvement report</a>.</p>
+      </div>
+    </section>
+
+    <footer class="foot">
+      <p><strong>Local source artifacts:</strong> <code>browser-use-benchmark\run_data\harness_comparisons\harness-pilot-20260823-t001</code>. These traces contain decrypted benchmark content and should not be published.</p>
+      <p>Prepared from the immutable manifest, four cell results, judge outputs, trace metrics, process cleanup checks, and saved screenshots.</p>
+    </footer>
+  </main>
+</body>
+</html>

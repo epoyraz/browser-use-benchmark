@@ -280,6 +280,7 @@ dependencies = [
     { name = "certifi" },
     { name = "cryptography" },
     { name = "httpx" },
+    { name = "psutil" },
     { name = "python-dotenv" },
 ]
 
@@ -298,6 +299,7 @@ requires-dist = [
     { name = "certifi" },
     { name = "cryptography" },
     { name = "httpx" },
+    { name = "psutil" },
     { name = "python-dotenv" },
 ]
 

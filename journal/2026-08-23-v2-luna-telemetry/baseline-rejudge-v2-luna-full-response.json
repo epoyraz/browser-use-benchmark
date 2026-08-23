@@ -1,0 +1,119 @@
+{
+  "generated_at": "2026-08-23T18:29:06.703418+02:00",
+  "judge": {
+    "name": "codex",
+    "model": "gpt-5.6-luna",
+    "effort": "max"
+  },
+  "input_contract": "full final response plus compact marker",
+  "results": [
+    {
+      "task_index": 5,
+      "category": "WebBenchREAD",
+      "original_score": 0,
+      "score": 0,
+      "judgement": {
+        "score": 0,
+        "reasoning": "The agent stopped at the cookie-consent banner and did not use advanced search or provide the first five 2022 movie results with ratings.",
+        "failure_reason": "Requested results were not retrieved or output.",
+        "impossible_task": false,
+        "reached_captcha": false,
+        "duration_seconds": 8.770102900001802,
+        "judge": "codex",
+        "model": "gpt-5.6-luna",
+        "reasoning_effort": "max",
+        "error": null
+      }
+    },
+    {
+      "task_index": 11,
+      "category": "OM2W2",
+      "original_score": 0,
+      "score": 1,
+      "judgement": {
+        "score": 1,
+        "reasoning": "The response identifies three Indiana DNR state parks, gives each physical address, an official on.in.gov park link, and route totals under 260 miles: approximately 240.0, 253.1, and 251.2 miles. The requested information is complete and supported by the trajectory.",
+        "failure_reason": "",
+        "impossible_task": false,
+        "reached_captcha": false,
+        "duration_seconds": 29.70428660000107,
+        "judge": "codex",
+        "model": "gpt-5.6-luna",
+        "reasoning_effort": "max",
+        "error": null
+      }
+    },
+    {
+      "task_index": 22,
+      "category": "InteractionTests",
+      "original_score": 1,
+      "score": 1,
+      "judgement": {
+        "score": 1,
+        "reasoning": "The final screenshot shows the success message, and the trajectory verifies all five fields, including the uploaded file, were collected before submission.",
+        "failure_reason": "",
+        "impossible_task": false,
+        "reached_captcha": false,
+        "duration_seconds": 15.192224099999294,
+        "judge": "codex",
+        "model": "gpt-5.6-luna",
+        "reasoning_effort": "max",
+        "error": null
+      }
+    },
+    {
+      "task_index": 23,
+      "category": "GAIA",
+      "original_score": 1,
+      "score": 1,
+      "judgement": {
+        "score": 1,
+        "reasoning": "The agent reported \u201cbriniest,\u201d which exactly matches the authoritative ground truth and correctly applied the requested tie-break.",
+        "failure_reason": "",
+        "impossible_task": false,
+        "reached_captcha": false,
+        "duration_seconds": 10.767607100002351,
+        "judge": "codex",
+        "model": "gpt-5.6-luna",
+        "reasoning_effort": "max",
+        "error": null
+      }
+    },
+    {
+      "task_index": 44,
+      "category": "BrowseComp",
+      "original_score": 1,
+      "score": 1,
+      "judgement": {
+        "score": 1,
+        "reasoning": "The final response gives 15.5 cm and 13.2 cm, exactly matching the ground truth and correctly identifying the dog and cat fleas.",
+        "failure_reason": "",
+        "impossible_task": false,
+        "reached_captcha": false,
+        "duration_seconds": 9.934883900001296,
+        "judge": "codex",
+        "model": "gpt-5.6-luna",
+        "reasoning_effort": "max",
+        "error": null
+      }
+    },
+    {
+      "task_index": 56,
+      "category": "OM2W2",
+      "original_score": 0,
+      "score": 1,
+      "judgement": {
+        "score": 1,
+        "reasoning": "The agent provided the correct shelter address, linked the official foster-program page and foster board, and listed three under-six dogs with individual profile links. The screenshots verify photos, descriptions, ages, and foster-board placement for Callie, King, and Marina.",
+        "failure_reason": "",
+        "impossible_task": false,
+        "reached_captcha": false,
+        "duration_seconds": 87.0507961000003,
+        "judge": "codex",
+        "model": "gpt-5.6-luna",
+        "reasoning_effort": "max",
+        "error": null
+      }
+    }
+  ]
+}

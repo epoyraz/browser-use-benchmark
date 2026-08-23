@@ -50,6 +50,7 @@ class AgentSpec:
     cli: Path
     version: str
     model: str | None = None
+    reasoning_effort: str | None = None
 
     def to_manifest(self) -> dict[str, object]:
         return {
@@ -57,6 +58,7 @@ class AgentSpec:
             "cli": str(self.cli),
             "cli_version": self.version,
             "model": self.model or "cli-default",
+            "reasoning_effort": self.reasoning_effort or "cli-default",
             "authentication": "saved-subscription-login",
             "model_api_keys_allowed": False,
         }
@@ -103,7 +105,11 @@ def _version(command: list[str]) -> str:
     return (result.stdout or result.stderr or "unknown").strip()
 
 
-def resolve_agent(name: str, model: str | None = None) -> AgentSpec:
+def resolve_agent(
+    name: str,
+    model: str | None = None,
+    reasoning_effort: str | None = None,
+) -> AgentSpec:
     if name not in {"codex", "claude"}:
         raise AgentValidationError(
             f"Unknown local agent {name!r}; expected codex or claude"
@@ -117,6 +123,7 @@ def resolve_agent(name: str, model: str | None = None) -> AgentSpec:
         cli=Path(found).resolve(),
         version=_version([found, flag]),
         model=model,
+        reasoning_effort=reasoning_effort,
     )
 
 
@@ -208,6 +215,13 @@ def build_codex_command(
     ]
     if spec.model:
         command.extend(["--model", spec.model])
+    if spec.reasoning_effort:
+        command.extend(
+            [
+                "--config",
+                "model_reasoning_effort=" + json.dumps(spec.reasoning_effort),
+            ]
+        )
     command.append("-")
     return command
 
@@ -240,6 +254,8 @@ def build_claude_command(
     ]
     if spec.model:
         command.extend(["--model", spec.model])
+    if spec.reasoning_effort:
+        command.extend(["--effort", spec.reasoning_effort])
     return command
 
 
@@ -400,6 +416,7 @@ async def run_agent(
     timeout_seconds: float,
     codex_sandbox: str,
     claude_max_turns: int,
+    on_process_started: Callable[[int], None] | None = None,
 ) -> AgentExecution:
     result = AgentExecution()
     command = (
@@ -432,6 +449,8 @@ async def run_agent(
                 limit=256 * 1024 * 1024,
                 **process_group_kwargs(),
             )
+            if on_process_started is not None:
+                on_process_started(proc.pid)
             assert (
                 proc.stdin is not None
                 and proc.stdout is not None

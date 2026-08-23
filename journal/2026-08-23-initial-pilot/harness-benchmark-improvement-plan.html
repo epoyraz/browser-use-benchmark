@@ -1,0 +1,450 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:,">
+  <title>Browser Harness Benchmark — Postmortem and Improvement Plan</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f6f5fb;
+      --panel: #ffffff;
+      --panel-soft: #f0eef9;
+      --text: #1f2130;
+      --muted: #626476;
+      --line: #deddeb;
+      --purple: #6d4bc3;
+      --blue: #2864d7;
+      --green: #168355;
+      --orange: #ca7118;
+      --red: #be3e49;
+      --shadow: 0 16px 44px rgba(49, 40, 84, .10);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #11101a;
+        --panel: #1b1927;
+        --panel-soft: #242136;
+        --text: #f2effb;
+        --muted: #bbb6ca;
+        --line: #3b3750;
+        --purple: #b19af3;
+        --blue: #83acff;
+        --green: #5bd09a;
+        --orange: #f0a55a;
+        --red: #ff818c;
+        --shadow: 0 16px 44px rgba(0, 0, 0, .3);
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 16px/1.58 ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    a { color: var(--blue); }
+    code, pre { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+    code { overflow-wrap: anywhere; font-size: .92em; }
+    .shell { width: min(1160px, calc(100% - 32px)); margin: 0 auto; }
+    .hero {
+      padding: 62px 0 48px;
+      border-bottom: 1px solid var(--line);
+      background:
+        radial-gradient(circle at 86% 8%, color-mix(in srgb, var(--orange) 22%, transparent), transparent 31%),
+        radial-gradient(circle at 10% 88%, color-mix(in srgb, var(--purple) 28%, transparent), transparent 36%),
+        var(--panel);
+    }
+    .eyebrow {
+      margin: 0 0 10px;
+      color: var(--purple);
+      font-size: .78rem;
+      font-weight: 750;
+      letter-spacing: .13em;
+      text-transform: uppercase;
+    }
+    h1, h2, h3 { line-height: 1.18; letter-spacing: -.025em; }
+    h1 { max-width: 940px; margin: 0; font-size: clamp(2.3rem, 6vw, 4.8rem); }
+    h2 { margin: 0 0 18px; font-size: clamp(1.55rem, 3vw, 2.25rem); }
+    h3 { margin: 0 0 9px; font-size: 1.1rem; }
+    .subtitle { max-width: 850px; margin: 19px 0 0; color: var(--muted); font-size: 1.12rem; }
+    .meta { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 24px; }
+    .tag { padding: 6px 10px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); font-size: .84rem; }
+    main { padding: 34px 0 76px; }
+    section { margin-top: 56px; }
+    .summary {
+      padding: 26px;
+      border: 1px solid var(--line);
+      border-left: 7px solid var(--purple);
+      border-radius: 18px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+    }
+    .summary p { margin: 8px 0 0; font-size: 1.05rem; }
+    .grid-2, .grid-3 { display: grid; gap: 18px; }
+    .grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .card {
+      padding: 21px;
+      border: 1px solid var(--line);
+      border-radius: 15px;
+      background: var(--panel);
+    }
+    .card p:last-child, .card ul:last-child { margin-bottom: 0; }
+    .priority {
+      display: inline-block;
+      margin-bottom: 12px;
+      padding: 4px 8px;
+      border-radius: 999px;
+      font-size: .76rem;
+      font-weight: 750;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+    }
+    .p0 { color: var(--red); background: color-mix(in srgb, var(--red) 12%, transparent); }
+    .p1 { color: var(--orange); background: color-mix(in srgb, var(--orange) 13%, transparent); }
+    .p2 { color: var(--blue); background: color-mix(in srgb, var(--blue) 12%, transparent); }
+    .done { color: var(--green); background: color-mix(in srgb, var(--green) 12%, transparent); }
+    .timeline { position: relative; margin-left: 12px; padding-left: 28px; }
+    .timeline::before { content: ""; position: absolute; left: 7px; top: 7px; bottom: 7px; width: 2px; background: var(--line); }
+    .event { position: relative; padding: 0 0 25px; }
+    .event:last-child { padding-bottom: 0; }
+    .event::before {
+      content: "";
+      position: absolute;
+      left: -27px;
+      top: 7px;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: var(--purple);
+      box-shadow: 0 0 0 4px var(--panel);
+    }
+    .event.bad::before { background: var(--orange); }
+    .event strong { display: block; }
+    .event span { color: var(--muted); font-size: .9rem; }
+    .causal {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr auto 1fr;
+      gap: 10px;
+      align-items: center;
+    }
+    .node { min-height: 130px; padding: 18px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); }
+    .node strong { display: block; margin-bottom: 7px; }
+    .arrow { color: var(--muted); font-size: 1.5rem; }
+    .confidence { display: grid; grid-template-columns: 84px 1fr; gap: 12px; align-items: start; }
+    .confidence + .confidence { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
+    .confidence b { color: var(--purple); }
+    .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); }
+    table { width: 100%; min-width: 780px; border-collapse: collapse; }
+    th, td { padding: 12px 14px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { background: var(--panel-soft); color: var(--muted); font-size: .76rem; letter-spacing: .06em; text-transform: uppercase; }
+    tr:last-child td { border-bottom: 0; }
+    .num { text-align: right; font-variant-numeric: tabular-nums; }
+    .checklist { margin: 0; padding: 0; list-style: none; }
+    .checklist li { position: relative; padding-left: 28px; }
+    .checklist li + li { margin-top: 10px; }
+    .checklist li::before { content: "✓"; position: absolute; left: 0; color: var(--green); font-weight: 800; }
+    .checklist.pending li::before { content: "○"; color: var(--orange); }
+    .schema {
+      overflow-x: auto;
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: #10131b;
+      color: #e9eef9;
+      font-size: .84rem;
+      line-height: 1.55;
+    }
+    .funnel { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+    .stage { padding: 20px; border: 1px solid var(--line); border-top: 5px solid var(--purple); border-radius: 14px; background: var(--panel); }
+    .stage .count { display: block; margin: 8px 0 3px; font-size: 2rem; font-weight: 780; }
+    .stage small { color: var(--muted); }
+    .gate { padding: 18px 20px; border: 1px solid color-mix(in srgb, var(--green) 42%, var(--line)); border-radius: 14px; background: color-mix(in srgb, var(--green) 10%, var(--panel)); }
+    .gate ul { margin-bottom: 0; }
+    .warning { padding: 18px 20px; border: 1px solid color-mix(in srgb, var(--orange) 42%, var(--line)); border-radius: 14px; background: color-mix(in srgb, var(--orange) 10%, var(--panel)); }
+    .foot { margin-top: 60px; padding-top: 22px; border-top: 1px solid var(--line); color: var(--muted); font-size: .88rem; }
+    @media (max-width: 900px) {
+      .grid-3, .funnel { grid-template-columns: 1fr; }
+      .causal { grid-template-columns: 1fr; }
+      .causal .arrow { justify-self: center; transform: rotate(90deg); }
+    }
+    @media (max-width: 700px) {
+      .shell { width: min(100% - 20px, 1160px); }
+      .hero { padding: 42px 0 34px; }
+      .grid-2 { grid-template-columns: 1fr; }
+      section { margin-top: 43px; }
+    }
+    @media print {
+      :root { --bg: #fff; --panel: #fff; --panel-soft: #f3f3f7; --text: #15151c; --muted: #50505d; --line: #d5d5dd; }
+      .shell { width: 100%; }
+      .hero { padding-top: 24px; }
+      .summary, .card, .stage, .node { box-shadow: none; break-inside: avoid; }
+      section { break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+  <header class="hero">
+    <div class="shell">
+      <p class="eyebrow">Postmortem · improvement plan</p>
+      <h1>What the first run taught us—and how to make the benchmark credible</h1>
+      <p class="subtitle">A practical diagnosis of the crossed results, the new task-wide CAPTCHA exclusion rule, runtime variance, and the next experimental design.</p>
+      <div class="meta">
+        <span class="tag">Based on pilot harness-pilot-20260823-t001</span>
+        <span class="tag">Raw artifacts preserved</span>
+        <span class="tag">Task-wide CAPTCHA exclusion implemented</span>
+        <span class="tag">Broader rerun still required</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="shell">
+    <section>
+      <div class="summary">
+        <p class="eyebrow">Reflection</p>
+        <h2>The benchmark is mechanically sound but experimentally under-specified.</h2>
+        <p>The runner did the hard engineering work well: isolation, provenance, model selection, evidence capture, judging, and teardown all held. The paired schedule exposed a complete second-arm order effect. Under the corrected policy, one CAPTCHA observation excludes that task across every agent, harness, and repetition. Since the pilot selected only one task, its official result is now zero scored tasks—not a tie and not a ranking.</p>
+      </div>
+    </section>
+
+    <section aria-labelledby="happened-heading">
+      <h2 id="happened-heading">What just happened</h2>
+      <div class="grid-2">
+        <div class="card">
+          <h3>Codex pair</h3>
+          <div class="timeline">
+            <div class="event"><strong>v1 ran first</strong><span>Reached the ranked list; raw audit pass; task later excluded.</span></div>
+            <div class="event bad"><strong>v2 ran second</strong><span>Cloudflare blocked the list; raw audit fail; task excluded.</span></div>
+          </div>
+        </div>
+        <div class="card">
+          <h3>Claude pair</h3>
+          <div class="timeline">
+            <div class="event"><strong>v2 ran first</strong><span>Reached the same ranked list; raw audit pass; task later excluded.</span></div>
+            <div class="event bad"><strong>v1 ran second</strong><span>Hit Cloudflare and later recovered the answer; raw audit fail; task excluded.</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section aria-labelledby="causal-heading">
+      <h2 id="causal-heading">Most likely causal chain</h2>
+      <div class="causal" role="img" aria-label="Repeated same-site traffic from one local IP led to second-arm Cloudflare challenges, requiring task-wide exclusion from benchmark scoring">
+        <div class="node"><strong>Repeated same-site traffic</strong>Fresh profiles, but one local IP and tightly spaced sequential arms.</div>
+        <div class="arrow" aria-hidden="true">→</div>
+        <div class="node"><strong>Second-arm site defense</strong>Both order-1 cells saw Cloudflare; neither order-0 cell did.</div>
+        <div class="arrow" aria-hidden="true">→</div>
+        <div class="node"><strong>Task excluded in full</strong>All four cells remain auditable, but none contributes to score or comparative timing.</div>
+      </div>
+    </section>
+
+    <section aria-labelledby="confidence-heading">
+      <h2 id="confidence-heading">Diagnosis, with confidence</h2>
+      <div class="card">
+        <div class="confidence"><b>High</b><div><strong>Order/site-state confound.</strong> Evidence: 2/2 first arms passed with no CAPTCHA; 2/2 second arms encountered CAPTCHA. Harness labels were balanced across those positions.</div></div>
+        <div class="confidence"><b>High</b><div><strong>Raw cell scoring conflates capability and environment.</strong> Luna recognized Claude/v1’s answer as correct but returned a raw failure solely because the prompt mandated failure after any CAPTCHA. Task-wide exclusion prevents that verdict from affecting the comparison.</div></div>
+        <div class="confidence"><b>High</b><div><strong>Sample size cannot support comparison.</strong> One task × one repeat provides no estimate of model or website variance and no confidence interval.</div></div>
+        <div class="confidence"><b>Medium</b><div><strong>Latency is confounded.</strong> Codex/v2 exited early at 70.4 seconds; Claude/v1 spent 391.6 seconds recovering. Neither value estimates steady-state harness speed.</div></div>
+        <div class="confidence"><b>Medium</b><div><strong>Headless/local browsing may increase blocking risk.</strong> Plausible, but this run did not include a headful or isolated-egress control, so it is not established.</div></div>
+      </div>
+    </section>
+
+    <section aria-labelledby="score-heading">
+      <h2 id="score-heading">Separate raw evidence from the scored task set</h2>
+      <div class="grid-3">
+        <div class="card">
+          <span class="priority p0">P0</span>
+          <h3>Raw audit verdict</h3>
+          <p>Keep each judge pass/fail verdict and evidence unchanged so the run remains reproducible. Raw cell verdicts are never the headline comparison after an exclusion.</p>
+        </div>
+        <div class="card">
+          <span class="priority p0">P0</span>
+          <h3>Task-wide CAPTCHA exclusion</h3>
+          <p>If any cell reaches CAPTCHA or human verification, exclude the whole task across every agent, harness, and repetition—including otherwise clean cells and timing deltas.</p>
+        </div>
+        <div class="card">
+          <span class="priority p1">P1</span>
+          <h3>Answer correctness</h3>
+          <p>Record whether the final answer itself is correct, independently of environment policy. This captures cases like Claude/v1 without rewarding CAPTCHA interaction.</p>
+        </div>
+      </div>
+      <pre class="schema" aria-label="Implemented task exclusion schema"><code>{
+  "raw_audit_score": 0,
+  "answer_correct": true,
+  "scored_score": null,
+  "task_scored": false,
+  "task_exclusion_reason": "captcha",
+  "excluded_scope": "all_agents_harnesses_repetitions",
+  "order": 1,
+  "judge": {
+    "model": "gpt-5.6-luna",
+    "reasoning_effort": "max"
+  }
+}</code></pre>
+    </section>
+
+    <section aria-labelledby="implemented-heading">
+      <h2 id="implemented-heading">Adjustments implemented after the pilot</h2>
+      <div class="grid-2">
+        <div class="card">
+          <span class="priority done">Implemented</span>
+          <h3>Model effort is now a first-class axis</h3>
+          <ul class="checklist">
+            <li>Added explicit Codex, Claude, and judge effort options.</li>
+            <li>Applied effort to both contestant and judge commands.</li>
+            <li>Recorded effort in manifests and judgement artifacts.</li>
+            <li>This run used Terra high and Luna max exactly as requested.</li>
+          </ul>
+        </div>
+        <div class="card">
+          <span class="priority done">Implemented</span>
+          <h3>Validity-aware, task-wide reporting</h3>
+          <ul class="checklist">
+            <li>Added task-level CAPTCHA detection and an explicit exclusion list.</li>
+            <li>Excluded every affected task cell and paired timing delta from scoring.</li>
+            <li>Added within-pair order diagnostics and CAPTCHA rates.</li>
+            <li>Added judge failure reasons to the Markdown report.</li>
+            <li>Added warnings for low repeats, blockers, and strong order effects.</li>
+          </ul>
+        </div>
+        <div class="card">
+          <span class="priority done">Implemented</span>
+          <h3>Consistent CAPTCHA behavior</h3>
+          <ul class="checklist">
+            <li>Agents must now treat CAPTCHA/human verification as a blocker.</li>
+            <li>They save one screenshot, stop interacting, and report the wall.</li>
+            <li>This prevents one model from spending minutes on a task that cannot enter the scored set.</li>
+          </ul>
+        </div>
+        <div class="card">
+          <span class="priority done">Validated</span>
+          <h3>Regression coverage</h3>
+          <ul class="checklist">
+            <li>Reasoning-effort command construction is tested for agents and judges.</li>
+            <li>Cross-agent task-wide exclusion and order-confound warnings are tested.</li>
+            <li>The benchmark suite now passes 13 tests.</li>
+            <li>The original pilot artifacts and raw judge results remain unchanged.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section aria-labelledby="next-heading">
+      <h2 id="next-heading">Further changes before a reportable comparison</h2>
+      <div class="grid-3">
+        <div class="card">
+          <span class="priority p0">P0 · required</span>
+          <h3>Pre-declared reserve-task pool</h3>
+          <p>Select reserve tasks before execution. If CAPTCHA excludes a primary task, report the exclusion and fill the sample from the next reserve in a fresh run block, without choosing replacements based on harness outcomes.</p>
+        </div>
+        <div class="card">
+          <span class="priority p0">P0 · required</span>
+          <h3>Minimum replication gate</h3>
+          <p>Require at least three repetitions before any harness claim. Alternate or randomize order within each task/repetition and report exact paired confidence intervals.</p>
+        </div>
+        <div class="card">
+          <span class="priority p0">P0 · required</span>
+          <h3>Task viability metadata</h3>
+          <p>Manually label read-only, browser-state-only, download, authentication, and external-side-effect tasks. Runtime keyword screens are not enough.</p>
+        </div>
+        <div class="card">
+          <span class="priority p1">P1 · anti-bot</span>
+          <h3>Separate browser modes</h3>
+          <p>Keep local-headless results distinct from headful or isolated cloud-browser results. If isolated egress is used, treat it as a fixed experimental axis—never mix modes in one aggregate.</p>
+        </div>
+        <div class="card">
+          <span class="priority p1">P1 · judging</span>
+          <h3>Use deterministic graders where possible</h3>
+          <p>Exact-list, numeric, and state-check tasks should have deterministic ground-truth checks. Use Luna for semantic cases and report judge-versus-deterministic agreement.</p>
+        </div>
+        <div class="card">
+          <span class="priority p1">P1 · operations</span>
+          <h3>Bound retries and cooldowns</h3>
+          <p>Predeclare zero or one site-block retry after a fixed cooldown. Retried cells stay flagged. Unbounded challenge recovery creates model-dependent runtime and policy drift.</p>
+        </div>
+        <div class="card">
+          <span class="priority p2">P2 · metrics</span>
+          <h3>Normalize efficiency carefully</h3>
+          <p>Compare time and harness calls only among eligible completed cells. Keep vendor-specific token schemas separate; do not add unlike token fields into one score.</p>
+        </div>
+        <div class="card">
+          <span class="priority p2">P2 · provenance</span>
+          <h3>Capture runtime-resolved identity</h3>
+          <p>Store the model reported by CLI runtime events where available, in addition to the requested model and effort already present in the manifest.</p>
+        </div>
+        <div class="card">
+          <span class="priority p2">P2 · statistics</span>
+          <h3>Report paired uncertainty</h3>
+          <p>Use task-level paired bootstrap intervals and an exact paired test. Show excluded tasks separately; never impute them as ordinary failures or retain their clean cells in a capability claim.</p>
+        </div>
+      </div>
+    </section>
+
+    <section aria-labelledby="run-design-heading">
+      <h2 id="run-design-heading">Staged next-run design</h2>
+      <div class="funnel">
+        <div class="stage">
+          <span class="eyebrow">Stage A · machinery</span>
+          <span class="count">12 cells</span>
+          <strong>3 reviewed tasks × 1 repeat</strong>
+          <p>Confirm task-wide exclusion, order diagnostics, resolved models, screenshots, and teardown.</p>
+          <small>Approx. 52 minutes sequential at this pilot’s mean, before parallelism.</small>
+        </div>
+        <div class="stage">
+          <span class="eyebrow">Stage B · validity</span>
+          <span class="count">60 cells</span>
+          <strong>5 tasks × 3 repeats</strong>
+          <p>Estimate order effects, site-block rate, repeat variance, and judge agreement before scaling.</p>
+          <small>Approx. 4h 19m sequential at this pilot’s mean.</small>
+        </div>
+        <div class="stage">
+          <span class="eyebrow">Stage C · reportable slice</span>
+          <span class="count">240 cells</span>
+          <strong>20 read-only tasks × 3 repeats</strong>
+          <p>Only proceed after Stage B meets the validity gates below. Use parallel task pairs with isolated browser resources.</p>
+          <small>Approx. 17h 14m sequential at this pilot’s mean.</small>
+        </div>
+      </div>
+      <div class="warning" style="margin-top:16px">
+        <strong>Do not immediately rerun the same live task from the same IP.</strong> The pilot suggests site-defense state persists across tightly spaced arms. A rerun without cooldown or isolated egress would mostly measure Cloudflare state.
+      </div>
+    </section>
+
+    <section aria-labelledby="gates-heading">
+      <h2 id="gates-heading">Go/no-go gates for publication</h2>
+      <div class="gate">
+        <ul>
+          <li><strong>Replication:</strong> at least 3 repeats per task/harness/model cell.</li>
+          <li><strong>Comparable coverage:</strong> at least 80% of selected tasks remain in the scored set.</li>
+          <li><strong>Blocking:</strong> CAPTCHA task-exclusion rate at or below 10%, with no within-pair order gap above 15 percentage points.</li>
+          <li><strong>Reliability:</strong> judge errors 0%; technical failures below 5%; no leaked browser or daemon processes.</li>
+          <li><strong>Judge calibration:</strong> at least 95% agreement with deterministic graders on tasks that support them.</li>
+          <li><strong>Reporting:</strong> scored tasks, excluded tasks, raw audit outcomes, order diagnostics, eligible latency, and uncertainty all shown separately.</li>
+        </ul>
+      </div>
+    </section>
+
+    <section aria-labelledby="decision-heading">
+      <h2 id="decision-heading">Decision</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Question</th><th>Answer after pilot</th><th>Reason</th></tr></thead>
+          <tbody>
+            <tr><td>Did the benchmark execute successfully?</td><td><strong style="color:var(--green)">Yes</strong></td><td>4/4 cells completed; valid structured judgements; clean teardown; complete provenance and evidence.</td></tr>
+            <tr><td>Can this run rank v1 versus v2?</td><td><strong style="color:var(--red)">No</strong></td><td>The sole task is excluded, leaving zero scored tasks; raw outcomes aligned perfectly with order.</td></tr>
+            <tr><td>Does the benchmark need adjustment?</td><td><strong style="color:var(--orange)">Yes</strong></td><td>Task-wide CAPTCHA exclusion is implemented; replication, reserve tasks, and availability controls are still required.</td></tr>
+            <tr><td>Is the runner worth continuing with?</td><td><strong style="color:var(--green)">Yes</strong></td><td>The mechanical foundation is unusually well instrumented; the remaining issues are experimental design and reporting.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <footer class="foot">
+      <p>See <a href="harness-benchmark-first-results.html">the full first-results report</a> for exact cell metrics, timing graphics, judge interpretation, and screenshots.</p>
+      <p>The local benchmark trace contains decrypted task content and should remain private. Improvement recommendations are based on the manifest, result JSON, agent/judge logs, visual evidence, and process cleanup audit.</p>
+    </footer>
+  </main>
+</body>
+</html>

@@ -1,4 +1,4 @@
-"""Resolve and validate Browser Harness checkouts for paired benchmarks.
+"""Resolve and validate Browser Harness checkouts for benchmark runs.
 
 The benchmark never imports either harness package.  A :class:`HarnessSpec`
 points at the console script inside that checkout's own virtual environment,
@@ -69,6 +69,9 @@ class HarnessSpec:
     daemon_module: str | None
     dirty: bool = False
     expected_git_sha: str | None = None
+    worktree_diff_sha256: str | None = None
+    worktree_diff_bytes: int = 0
+    worktree_status_sha256: str | None = None
 
     def daemon_command(self, daemon_name: str) -> list[str]:
         if self.daemon_module:
@@ -180,6 +183,30 @@ def _git_metadata(root: Path) -> tuple[str, bool]:
     return sha.lower(), bool(status.strip())
 
 
+def _worktree_fingerprint(root: Path) -> tuple[str, int, str]:
+    """Hash, but never persist, a dirty tracked diff and complete porcelain status.
+
+    The patch hash makes an explicitly allowed dirty candidate reproducible enough to
+    distinguish two runs at the same HEAD. Porcelain also fingerprints untracked path
+    names without reading potentially private untracked contents.
+    """
+    git = shutil.which("git")
+    if not git:
+        raise HarnessValidationError("git is required to fingerprint a dirty checkout")
+    patch = _run(
+        [git, "-C", str(root), "diff", "--binary", "--no-ext-diff", "HEAD", "--", "."]
+    )
+    status = _run(
+        [git, "-C", str(root), "status", "--porcelain=v1", "--untracked-files=all"]
+    )
+    encoded = patch.encode("utf-8")
+    return (
+        hashlib.sha256(encoded).hexdigest(),
+        len(encoded),
+        hashlib.sha256(status.encode("utf-8")).hexdigest(),
+    )
+
+
 def resolve_harness(
     name: str,
     root: str | Path,
@@ -237,6 +264,11 @@ def resolve_harness(
                 "Use the requested checkout, or explicitly pass --allow-sha-mismatch --yes."
             )
 
+    diff_sha256 = status_sha256 = None
+    diff_bytes = 0
+    if dirty and not unpinned:
+        diff_sha256, diff_bytes, status_sha256 = _worktree_fingerprint(path)
+
     python, cli = _venv_paths(path, contract.cli_name)
     if prepare:
         python, cli = prepare_harness(path, contract.cli_name)
@@ -264,6 +296,9 @@ def resolve_harness(
         daemon_module=contract.daemon_module,
         dirty=dirty,
         expected_git_sha=expected_git_sha,
+        worktree_diff_sha256=diff_sha256,
+        worktree_diff_bytes=diff_bytes,
+        worktree_status_sha256=status_sha256,
     )
 
 
@@ -276,9 +311,9 @@ def resolve_harnesses(
     allow_unpinned: bool = False,
     allow_sha_mismatch: bool = False,
 ) -> dict[str, HarnessSpec]:
-    if set(roots) != {"v1", "v2"}:
+    if not roots or not set(roots).issubset(_CONTRACTS):
         raise HarnessValidationError(
-            "--harnesses must provide exactly v1=<path>,v2=<path>"
+            "--harnesses must provide v1=<path>, v2=<path>, or both"
         )
     expected_shas = expected_shas or {}
     return {
@@ -292,4 +327,5 @@ def resolve_harnesses(
             allow_sha_mismatch=allow_sha_mismatch,
         )
         for name in ("v1", "v2")
+        if name in roots
     }

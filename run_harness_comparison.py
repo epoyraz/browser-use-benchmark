@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Compare Browser Harness v1/v2 using local Codex and Claude subscription CLIs.
+"""Run one or both Browser Harness versions with local subscription CLIs.
 
 No model SDK is imported and no model API-key path exists in this runner.  Every task and
 optional judgement launches the installed ``codex`` or ``claude`` executable after verifying
@@ -86,18 +86,18 @@ def _confirm_risks(args: argparse.Namespace, harnesses) -> None:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
-            "Paired Browser Harness v1/v2 benchmark via local Codex/Claude subscription CLIs"
+            "Browser Harness benchmark via local subscription CLIs"
         )
     )
     parser.add_argument(
         "--harnesses",
         default="v1=../v1,v2=../v2",
-        help="Exactly v1=<checkout>,v2=<checkout>",
+        help="v1=<checkout>, v2=<checkout>, or both",
     )
     parser.add_argument(
         "--expected-shas",
         default="",
-        help="Optional expected revisions, e.g. v1=41108b8,v2=7cc604a",
+        help="Optional expected revisions for the selected harnesses",
     )
     parser.add_argument("--prepare-harnesses", action="store_true")
     parser.add_argument("--allow-dirty", action="store_true")
@@ -130,8 +130,25 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     parser.add_argument("--agents", default="codex,claude")
+    parser.add_argument(
+        "--codex-only",
+        action="store_true",
+        help="Fail closed unless every contestant and the judge use the Codex CLI",
+    )
     parser.add_argument("--codex-model", default="", help="Empty uses the CLI default")
+    parser.add_argument(
+        "--codex-effort",
+        choices=["none", "low", "medium", "high", "xhigh", "max"],
+        default=None,
+        help="Codex reasoning effort; empty uses the CLI default",
+    )
     parser.add_argument("--claude-model", default="", help="Empty uses the CLI default")
+    parser.add_argument(
+        "--claude-effort",
+        choices=["low", "medium", "high", "xhigh", "max"],
+        default=None,
+        help="Claude effort; empty uses the CLI default",
+    )
     parser.add_argument(
         "--judge",
         choices=["codex", "claude", "none"],
@@ -140,6 +157,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--judge-model", default="", help="Empty uses the judge CLI default"
+    )
+    parser.add_argument(
+        "--judge-effort",
+        choices=["none", "low", "medium", "high", "xhigh", "max"],
+        default=None,
+        help="Judge reasoning effort; empty uses the judge CLI default",
     )
     parser.add_argument("--task-timeout", type=float, default=1800)
     parser.add_argument("--judge-timeout", type=float, default=600)
@@ -176,6 +199,28 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--chrome-path", default="")
     parser.add_argument(
+        "--search-endpoint",
+        default="",
+        help=(
+            "Optional manifest-recorded HTML search URL template containing {query}; "
+            "agents must still open it through the selected harness"
+        ),
+    )
+    parser.add_argument(
+        "--extensive-telemetry",
+        action="store_true",
+        help=(
+            "Enable v2 action recordings, sanitized CDP tracing, bounded page "
+            "diagnostics, and owned-process sampling"
+        ),
+    )
+    parser.add_argument(
+        "--process-sample-interval",
+        type=float,
+        default=1.0,
+        help="Seconds between owned-process samples in extensive telemetry mode",
+    )
+    parser.add_argument(
         "--output-root",
         type=Path,
         default=ROOT_DIR / "run_data" / "harness_comparisons",
@@ -200,6 +245,10 @@ def resolve_config(args: argparse.Namespace) -> ComparisonConfig:
         raise ValueError("Timeouts must be positive")
     if args.claude_max_turns < 1:
         raise ValueError("--claude-max-turns must be >= 1")
+    if args.process_sample_interval <= 0:
+        raise ValueError("--process-sample-interval must be positive")
+    if args.search_endpoint and "{query}" not in args.search_endpoint:
+        raise ValueError("--search-endpoint must contain the literal {query} placeholder")
     if args.comparison_id and not re.fullmatch(
         r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}", args.comparison_id
     ):
@@ -226,15 +275,33 @@ def resolve_config(args: argparse.Namespace) -> ComparisonConfig:
     _confirm_risks(args, harnesses)
 
     agent_names = _csv_names(args.agents, allowed={"codex", "claude"})
+    if args.codex_only and (
+        agent_names != ["codex"] or args.judge != "codex"
+    ):
+        raise ValueError(
+            "--codex-only requires --agents codex and --judge codex"
+        )
     models = {
         "codex": args.codex_model or None,
         "claude": args.claude_model or None,
     }
-    agents = {name: resolve_agent(name, models[name]) for name in agent_names}
+    efforts = {
+        "codex": args.codex_effort,
+        "claude": args.claude_effort,
+    }
+    agents = {
+        name: resolve_agent(name, models[name], efforts[name]) for name in agent_names
+    }
+    if args.judge == "claude" and args.judge_effort == "none":
+        raise ValueError("Claude does not support --judge-effort none")
     judge = (
         None
         if args.judge == "none"
-        else resolve_agent(args.judge, args.judge_model or None)
+        else resolve_agent(
+            args.judge,
+            args.judge_model or None,
+            args.judge_effort,
+        )
     )
     auth_specs = dict(agents)
     if judge is not None:
@@ -291,6 +358,12 @@ def resolve_config(args: argparse.Namespace) -> ComparisonConfig:
         output_root=args.output_root.expanduser().resolve(),
         auth_status=auth_status,
         no_interleave=args.no_interleave,
+        record_actions=args.extensive_telemetry,
+        trace_cdp=args.extensive_telemetry,
+        capture_diagnostics=args.extensive_telemetry,
+        sample_processes=args.extensive_telemetry,
+        process_sample_interval_seconds=args.process_sample_interval,
+        search_endpoint=args.search_endpoint or None,
     )
 
 

@@ -1,0 +1,838 @@
+{
+  "generated_at": "2026-08-23T21:21:20.649067+02:00",
+  "baseline": {
+    "attempted": 38,
+    "captcha": 13,
+    "valid": 25,
+    "impossible": 4,
+    "eligible": 21,
+    "passes": 7,
+    "eligible_passes": 7,
+    "agent_seconds": 11946.99980459999,
+    "total_seconds": 12426.430077000008,
+    "commands": 669,
+    "input_tokens": 44871638,
+    "cached_tokens": 42644224,
+    "output_tokens": 344368,
+    "reasoning_tokens": 196220,
+    "cdp": 18577,
+    "helpers": 7605,
+    "frames": 1012
+  },
+  "candidate": {
+    "attempted": 5,
+    "captcha": 0,
+    "valid": 5,
+    "impossible": 0,
+    "eligible": 5,
+    "passes": 3,
+    "eligible_passes": 3,
+    "agent_seconds": 1952.926674299997,
+    "total_seconds": 2056.0872813999995,
+    "commands": 99,
+    "input_tokens": 6497827,
+    "cached_tokens": 6097408,
+    "output_tokens": 72791,
+    "reasoning_tokens": 41228,
+    "cdp": 1858,
+    "helpers": 493,
+    "frames": 218
+  },
+  "first_candidate": {
+    "attempted": 5,
+    "captcha": 1,
+    "valid": 4,
+    "impossible": 0,
+    "eligible": 4,
+    "passes": 3,
+    "eligible_passes": 3,
+    "agent_seconds": 2743.293656099995,
+    "total_seconds": 2799.7532207999975,
+    "commands": 151,
+    "input_tokens": 10140912,
+    "cached_tokens": 9718016,
+    "output_tokens": 89673,
+    "reasoning_tokens": 48370,
+    "cdp": 2317,
+    "helpers": 372,
+    "frames": 57
+  },
+  "baseline_steps": {
+    "command_output_chars": 5095460,
+    "page_text_output_chars": 2917959,
+    "page_text_commands": 395,
+    "skill_reads": 20,
+    "skill_output_chars": 448095,
+    "bash_heredocs": 4,
+    "open_page_commands": 0
+  },
+  "candidate_steps": {
+    "command_output_chars": 617103,
+    "page_text_output_chars": 0,
+    "page_text_commands": 0,
+    "skill_reads": 3,
+    "skill_output_chars": 23634,
+    "bash_heredocs": 0,
+    "open_page_commands": 59
+  },
+  "baseline_categories": [
+    {
+      "category": "GAIA",
+      "valid": 5,
+      "passes": 2,
+      "eligible": 5,
+      "eligible_passes": 2,
+      "seconds": 864.4311785999998,
+      "tokens": 2142012,
+      "cdp": 947
+    },
+    {
+      "category": "WebBenchREAD",
+      "valid": 5,
+      "passes": 0,
+      "eligible": 3,
+      "eligible_passes": 0,
+      "seconds": 552.772715199997,
+      "tokens": 791097,
+      "cdp": 636
+    },
+    {
+      "category": "InteractionTests",
+      "valid": 5,
+      "passes": 1,
+      "eligible": 4,
+      "eligible_passes": 1,
+      "seconds": 1038.9218427999913,
+      "tokens": 1381945,
+      "cdp": 909
+    },
+    {
+      "category": "BrowseComp",
+      "valid": 5,
+      "passes": 4,
+      "eligible": 5,
+      "eligible_passes": 4,
+      "seconds": 4391.200757800001,
+      "tokens": 19422192,
+      "cdp": 7317
+    },
+    {
+      "category": "OM2W2",
+      "valid": 5,
+      "passes": 0,
+      "eligible": 4,
+      "eligible_passes": 0,
+      "seconds": 5099.6733102,
+      "tokens": 21134392,
+      "cdp": 8768
+    }
+  ],
+  "baseline_helpers": [
+    {
+      "name": "goto",
+      "calls": 1034.0,
+      "failed": 148.0,
+      "total_ms": 2290155.5,
+      "cdp_total": 1034.0
+    },
+    {
+      "name": "screenshot",
+      "calls": 1281.0,
+      "failed": 139.0,
+      "total_ms": 157289.19999999998,
+      "cdp_total": 2428.0
+    },
+    {
+      "name": "wait_for",
+      "calls": 27.0,
+      "failed": 7.0,
+      "total_ms": 74724.40000000001,
+      "cdp_total": 54.0
+    },
+    {
+      "name": "js",
+      "calls": 4288.0,
+      "failed": 247.0,
+      "total_ms": 41040.3,
+      "cdp_total": 4288.0
+    },
+    {
+      "name": "click",
+      "calls": 30.0,
+      "failed": 0.0,
+      "total_ms": 5513.9,
+      "cdp_total": 60.0
+    },
+    {
+      "name": "wait_for_application_state",
+      "calls": 4.0,
+      "failed": 0.0,
+      "total_ms": 5040.299999999999,
+      "cdp_total": 12.0
+    },
+    {
+      "name": "page_text",
+      "calls": 795.0,
+      "failed": 8.0,
+      "total_ms": 4007.1,
+      "cdp_total": 1485.0
+    },
+    {
+      "name": "snapshot",
+      "calls": 79.0,
+      "failed": 0.0,
+      "total_ms": 2884.9,
+      "cdp_total": 96.0
+    },
+    {
+      "name": "fill_form",
+      "calls": 10.0,
+      "failed": 0.0,
+      "total_ms": 1690.7,
+      "cdp_total": 71.0
+    },
+    {
+      "name": "scroll",
+      "calls": 4.0,
+      "failed": 0.0,
+      "total_ms": 645.8,
+      "cdp_total": 12.0
+    },
+    {
+      "name": "press_key",
+      "calls": 41.0,
+      "failed": 0.0,
+      "total_ms": 334.2,
+      "cdp_total": 165.0
+    },
+    {
+      "name": "see",
+      "calls": 1.0,
+      "failed": 0.0,
+      "total_ms": 61.6,
+      "cdp_total": 3.0
+    },
+    {
+      "name": "form_schema",
+      "calls": 8.0,
+      "failed": 0.0,
+      "total_ms": 45.400000000000006,
+      "cdp_total": 9.0
+    },
+    {
+      "name": "upload_file",
+      "calls": 3.0,
+      "failed": 0.0,
+      "total_ms": 6.300000000000001,
+      "cdp_total": 3.0
+    }
+  ],
+  "baseline_protocol": [
+    {
+      "name": "Page.navigate",
+      "calls": 1034.0,
+      "failed": 62.0,
+      "total_ms": 516947.49999999994,
+      "cdp_total": 0.0
+    },
+    {
+      "name": "Page.captureScreenshot",
+      "calls": 1147.0,
+      "failed": 5.0,
+      "total_ms": 119081.49999999999,
+      "cdp_total": 0.0
+    },
+    {
+      "name": "Runtime.evaluate",
+      "calls": 6533.0,
+      "failed": 270.0,
+      "total_ms": 71090.70000000001,
+      "cdp_total": 0.0
+    },
+    {
+      "name": "Page.getLayoutMetrics",
+      "calls": 1281.0,
+      "failed": 134.0,
+      "total_ms": 30569.0,
+      "cdp_total": 0.0
+    },
+    {
+      "name": "Page.addScriptToEvaluateOnNewDocument",
+      "calls": 1313.0,
+      "failed": 1.0,
+      "total_ms": 12225.6,
+      "cdp_total": 0.0
+    },
+    {
+      "name": "Target.createTarget",
+      "calls": 21.0,
+      "failed": 0.0,
+      "total_ms": 5002.4,
+      "cdp_total": 0.0
+    },
+    {
+      "name": "Page.createIsolatedWorld",
+      "calls": 1527.0,
+      "failed": 77.0,
+      "total_ms": 3889.2999999999997,
+      "cdp_total": 0.0
+    },
+    {
+      "name": "Page.getFrameTree",
+      "calls": 1364.0,
+      "failed": 158.0,
+      "total_ms": 1495.6,
+      "cdp_total": 0.0
+    },
+    {
+      "name": "Performance.getMetrics",
+      "calls": 633.0,
+      "failed": 83.0,
+      "total_ms": 1020.8,
+      "cdp_total": 0.0
+    },
+    {
+      "name": "Input.dispatchMouseEvent",
+      "calls": 64.0,
+      "failed": 0.0,
+      "total_ms": 798.9,
+      "cdp_total": 0.0
+    },
+    {
+      "name": "Performance.enable",
+      "calls": 652.0,
+      "failed": 1.0,
+      "total_ms": 785.8999999999999,
+      "cdp_total": 0.0
+    },
+    {
+      "name": "Runtime.addBinding",
+      "calls": 656.0,
+      "failed": 0.0,
+      "total_ms": 646.0999999999999,
+      "cdp_total": 0.0
+    },
+    {
+      "name": "Log.enable",
+      "calls": 652.0,
+      "failed": 1.0,
+      "total_ms": 626.0,
+      "cdp_total": 0.0
+    },
+    {
+      "name": "Network.enable",
+      "calls": 652.0,
+      "failed": 1.0,
+      "total_ms": 608.5999999999999,
+      "cdp_total": 0.0
+    },
+    {
+      "name": "Runtime.enable",
+      "calls": 652.0,
+      "failed": 1.0,
+      "total_ms": 599.3000000000001,
+      "cdp_total": 0.0
+    },
+    {
+      "name": "Target.getTargets",
+      "calls": 150.0,
+      "failed": 23.0,
+      "total_ms": 345.40000000000003,
+      "cdp_total": 0.0
+    },
+    {
+      "name": "Target.createBrowserContext",
+      "calls": 18.0,
+      "failed": 0.0,
+      "total_ms": 320.5,
+      "cdp_total": 0.0
+    },
+    {
+      "name": "Target.disposeBrowserContext",
+      "calls": 30.0,
+      "failed": 24.0,
+      "total_ms": 236.0,
+      "cdp_total": 0.0
+    },
+    {
+      "name": "Input.dispatchKeyEvent",
+      "calls": 128.0,
+      "failed": 0.0,
+      "total_ms": 173.4,
+      "cdp_total": 0.0
+    },
+    {
+      "name": "Target.closeTarget",
+      "calls": 20.0,
+      "failed": 13.0,
+      "total_ms": 25.0,
+      "cdp_total": 0.0
+    },
+    {
+      "name": "Browser.getVersion",
+      "calls": 25.0,
+      "failed": 0.0,
+      "total_ms": 22.299999999999997,
+      "cdp_total": 0.0
+    },
+    {
+      "name": "DOM.performSearch",
+      "calls": 5.0,
+      "failed": 0.0,
+      "total_ms": 18.1,
+      "cdp_total": 0.0
+    },
+    {
+      "name": "Target.setAutoAttach",
+      "calls": 9.0,
+      "failed": 0.0,
+      "total_ms": 9.6,
+      "cdp_total": 0.0
+    },
+    {
+      "name": "DOM.discardSearchResults",
+      "calls": 5.0,
+      "failed": 0.0,
+      "total_ms": 4.7,
+      "cdp_total": 0.0
+    },
+    {
+      "name": "DOM.setFileInputFiles",
+      "calls": 3.0,
+      "failed": 0.0,
+      "total_ms": 4.4,
+      "cdp_total": 0.0
+    },
+    {
+      "name": "DOM.describeNode",
+      "calls": 3.0,
+      "failed": 0.0,
+      "total_ms": 3.2,
+      "cdp_total": 0.0
+    }
+  ],
+  "candidate_protocol": [
+    {
+      "name": "Page.navigate",
+      "calls": 209.0,
+      "failed": 5.0,
+      "total_ms": 189068.8,
+      "cdp_total": 0.0
+    },
+    {
+      "name": "Runtime.evaluate",
+      "calls": 557.0,
+      "failed": 6.0,
+      "total_ms": 42939.399999999994,
+      "cdp_total": 0.0
+    },
+    {
+      "name": "Page.addScriptToEvaluateOnNewDocument",
+      "calls": 195.0,
+      "failed": 3.0,
+      "total_ms": 30457.2,
+      "cdp_total": 0.0
+    },
+    {
+      "name": "Page.captureScreenshot",
+      "calls": 233.0,
+      "failed": 0.0,
+      "total_ms": 12874.400000000003,
+      "cdp_total": 0.0
+    },
+    {
+      "name": "Input.dispatchKeyEvent",
+      "calls": 76.0,
+      "failed": 0.0,
+      "total_ms": 319.3,
+      "cdp_total": 0.0
+    },
+    {
+      "name": "Page.getFrameTree",
+      "calls": 142.0,
+      "failed": 0.0,
+      "total_ms": 234.99999999999997,
+      "cdp_total": 0.0
+    },
+    {
+      "name": "Page.createIsolatedWorld",
+      "calls": 97.0,
+      "failed": 0.0,
+      "total_ms": 148.4,
+      "cdp_total": 0.0
+    },
+    {
+      "name": "Log.enable",
+      "calls": 96.0,
+      "failed": 0.0,
+      "total_ms": 136.2,
+      "cdp_total": 0.0
+    },
+    {
+      "name": "Performance.enable",
+      "calls": 96.0,
+      "failed": 0.0,
+      "total_ms": 136.1,
+      "cdp_total": 0.0
+    },
+    {
+      "name": "Runtime.addBinding",
+      "calls": 96.0,
+      "failed": 0.0,
+      "total_ms": 130.5,
+      "cdp_total": 0.0
+    },
+    {
+      "name": "Performance.getMetrics",
+      "calls": 46.0,
+      "failed": 0.0,
+      "total_ms": 105.2,
+      "cdp_total": 0.0
+    },
+    {
+      "name": "Input.dispatchMouseEvent",
+      "calls": 8.0,
+      "failed": 0.0,
+      "total_ms": 51.6,
+      "cdp_total": 0.0
+    },
+    {
+      "name": "Browser.getVersion",
+      "calls": 5.0,
+      "failed": 0.0,
+      "total_ms": 7.1,
+      "cdp_total": 0.0
+    },
+    {
+      "name": "DOM.setFileInputFiles",
+      "calls": 1.0,
+      "failed": 0.0,
+      "total_ms": 2.7,
+      "cdp_total": 0.0
+    },
+    {
+      "name": "DOM.describeNode",
+      "calls": 1.0,
+      "failed": 0.0,
+      "total_ms": 1.8,
+      "cdp_total": 0.0
+    }
+  ],
+  "baseline_deep_telemetry": {
+    "protocol_request_bytes": 8959735.0,
+    "protocol_response_bytes": 118926568.0,
+    "diagnostic_files": 628.0,
+    "diagnostic_events": 4949.0,
+    "recording_bytes": 38334771.0,
+    "peer_evictions": 0.0,
+    "peer_overflows": 0.0,
+    "transport_enqueued_frames": 0.0,
+    "transport_sent_frames": 0.0,
+    "browser_cpu": 1218.597,
+    "browser_read": 6057137957.0,
+    "browser_write": 4992079613.0,
+    "harness_daemon_cpu": 73.592,
+    "harness_daemon_read": 0.0,
+    "harness_daemon_write": 0.0,
+    "agent_cpu": 65.146,
+    "agent_read": 257700574.0,
+    "agent_write": 71055008.0,
+    "transport_queue_frames": 0.0,
+    "transport_buffer_bytes": 0.0,
+    "browser_rss": 3828281344.0,
+    "browser_processes": 29.0,
+    "harness_daemon_rss": 52334592.0,
+    "harness_daemon_processes": 3.0,
+    "agent_rss": 431497216.0,
+    "agent_processes": 10.0,
+    "host_memory_percent": 50.1,
+    "resource_count": 250.0,
+    "resource_transfer_bytes": 13811886.0,
+    "event_loop_ms": 36.0
+  },
+  "candidate_deep_telemetry": {
+    "protocol_request_bytes": 2062077.0,
+    "protocol_response_bytes": 35930304.0,
+    "diagnostic_files": 96.0,
+    "diagnostic_events": 98.0,
+    "recording_bytes": 6738111.0,
+    "peer_evictions": 2.0,
+    "peer_overflows": 0.0,
+    "transport_enqueued_frames": 32466.0,
+    "transport_sent_frames": 32465.0,
+    "browser_cpu": 163.03199999999998,
+    "browser_read": 749993587.0,
+    "browser_write": 719854574.0,
+    "harness_daemon_cpu": 10.296,
+    "harness_daemon_read": 0.0,
+    "harness_daemon_write": 561094.0,
+    "agent_cpu": 12.282999999999998,
+    "agent_read": 37394957.0,
+    "agent_write": 5650261.0,
+    "transport_queue_frames": 195.0,
+    "transport_buffer_bytes": 4235012.0,
+    "browser_rss": 1982054400.0,
+    "browser_processes": 20.0,
+    "harness_daemon_rss": 59600896.0,
+    "harness_daemon_processes": 3.0,
+    "agent_rss": 441663488.0,
+    "agent_processes": 10.0,
+    "host_memory_percent": 46.2,
+    "resource_count": 140.0,
+    "resource_transfer_bytes": 1651936.0,
+    "event_loop_ms": 0.5
+  },
+  "matched": {
+    "baseline": {
+      "attempted": 5,
+      "captcha": 0,
+      "valid": 5,
+      "impossible": 0,
+      "eligible": 5,
+      "passes": 3,
+      "eligible_passes": 3,
+      "agent_seconds": 1708.1958919999997,
+      "total_seconds": 1807.0949724999991,
+      "commands": 91,
+      "input_tokens": 3604934,
+      "cached_tokens": 3318016,
+      "output_tokens": 54691,
+      "reasoning_tokens": 31308,
+      "cdp": 1836,
+      "helpers": 518,
+      "frames": 56
+    },
+    "candidate": {
+      "attempted": 5,
+      "captcha": 0,
+      "valid": 5,
+      "impossible": 0,
+      "eligible": 5,
+      "passes": 3,
+      "eligible_passes": 3,
+      "agent_seconds": 1952.926674299997,
+      "total_seconds": 2056.0872813999995,
+      "commands": 99,
+      "input_tokens": 6497827,
+      "cached_tokens": 6097408,
+      "output_tokens": 72791,
+      "reasoning_tokens": 41228,
+      "cdp": 1858,
+      "helpers": 493,
+      "frames": 218
+    },
+    "agent_time_delta": 0.14326856975019434,
+    "input_token_delta": 0.8024815433514179,
+    "cdp_delta": 0.011982570806100218,
+    "command_delta": 0.08791208791208792,
+    "audited_baseline_passes": 4,
+    "tasks": [
+      {
+        "task_index": 5,
+        "category": "WebBenchREAD",
+        "baseline_agent_seconds": 51.712750399998185,
+        "candidate_agent_seconds": 126.09742299999925,
+        "baseline_input_tokens": 92903,
+        "candidate_input_tokens": 234011,
+        "baseline_cdp_calls": 67,
+        "candidate_cdp_calls": 122,
+        "baseline_raw_score": 0,
+        "baseline_audited_score": 0,
+        "candidate_score": 0
+      },
+      {
+        "task_index": 11,
+        "category": "OM2W2",
+        "baseline_agent_seconds": 956.1417051999997,
+        "candidate_agent_seconds": 976.6629648999988,
+        "baseline_input_tokens": 2019378,
+        "candidate_input_tokens": 4876057,
+        "baseline_cdp_calls": 904,
+        "candidate_cdp_calls": 1091,
+        "baseline_raw_score": 0,
+        "baseline_audited_score": 1,
+        "candidate_score": 0
+      },
+      {
+        "task_index": 22,
+        "category": "InteractionTests",
+        "baseline_agent_seconds": 246.3984386000011,
+        "candidate_agent_seconds": 369.893708399999,
+        "baseline_input_tokens": 394005,
+        "candidate_input_tokens": 508316,
+        "baseline_cdp_calls": 245,
+        "candidate_cdp_calls": 231,
+        "baseline_raw_score": 1,
+        "baseline_audited_score": 1,
+        "candidate_score": 1
+      },
+      {
+        "task_index": 23,
+        "category": "GAIA",
+        "baseline_agent_seconds": 206.33644490000006,
+        "candidate_agent_seconds": 221.2238959999995,
+        "baseline_input_tokens": 162904,
+        "candidate_input_tokens": 185490,
+        "baseline_cdp_calls": 117,
+        "candidate_cdp_calls": 126,
+        "baseline_raw_score": 1,
+        "baseline_audited_score": 1,
+        "candidate_score": 1
+      },
+      {
+        "task_index": 44,
+        "category": "BrowseComp",
+        "baseline_agent_seconds": 247.60655290000068,
+        "candidate_agent_seconds": 259.04868200000055,
+        "baseline_input_tokens": 935744,
+        "candidate_input_tokens": 693953,
+        "baseline_cdp_calls": 503,
+        "candidate_cdp_calls": 288,
+        "baseline_raw_score": 1,
+        "baseline_audited_score": 1,
+        "candidate_score": 1
+      }
+    ]
+  },
+  "post_run_live_validation": {
+    "status": "not included in candidate c02 benchmark scores",
+    "fresh_read_only_processes": 5,
+    "actual_cdp_calls": 17,
+    "adoption_cache_hits": 4,
+    "target_listings": 1,
+    "later_process_behavior": "one useful Runtime.evaluate each",
+    "open_pages_urls": 3,
+    "open_pages_wall_seconds": 2.37,
+    "open_pages_output_chars": 1928,
+    "open_pages_output_budget_chars": 3000,
+    "candidate_c02_repeated_setup_calls_now_session_scoped": 483
+  },
+  "validation": {
+    "focused_tests_passed": 229,
+    "full_tests_passed": 550,
+    "full_tests_skipped": 4,
+    "full_tests_failed": 10,
+    "full_test_failure_scope": "pre-existing Windows-only socket/path assumptions",
+    "ruff": "clean",
+    "benchmark_tests_passed": 19
+  },
+  "baseline_rejudge": {
+    "generated_at": "2026-08-23T18:29:06.703418+02:00",
+    "judge": {
+      "name": "codex",
+      "model": "gpt-5.6-luna",
+      "effort": "max"
+    },
+    "input_contract": "full final response plus compact marker",
+    "results": [
+      {
+        "task_index": 5,
+        "category": "WebBenchREAD",
+        "original_score": 0,
+        "score": 0,
+        "judgement": {
+          "score": 0,
+          "reasoning": "The agent stopped at the cookie-consent banner and did not use advanced search or provide the first five 2022 movie results with ratings.",
+          "failure_reason": "Requested results were not retrieved or output.",
+          "impossible_task": false,
+          "reached_captcha": false,
+          "duration_seconds": 8.770102900001802,
+          "judge": "codex",
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "max",
+          "error": null
+        }
+      },
+      {
+        "task_index": 11,
+        "category": "OM2W2",
+        "original_score": 0,
+        "score": 1,
+        "judgement": {
+          "score": 1,
+          "reasoning": "The response identifies three Indiana DNR state parks, gives each physical address, an official on.in.gov park link, and route totals under 260 miles: approximately 240.0, 253.1, and 251.2 miles. The requested information is complete and supported by the trajectory.",
+          "failure_reason": "",
+          "impossible_task": false,
+          "reached_captcha": false,
+          "duration_seconds": 29.70428660000107,
+          "judge": "codex",
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "max",
+          "error": null
+        }
+      },
+      {
+        "task_index": 22,
+        "category": "InteractionTests",
+        "original_score": 1,
+        "score": 1,
+        "judgement": {
+          "score": 1,
+          "reasoning": "The final screenshot shows the success message, and the trajectory verifies all five fields, including the uploaded file, were collected before submission.",
+          "failure_reason": "",
+          "impossible_task": false,
+          "reached_captcha": false,
+          "duration_seconds": 15.192224099999294,
+          "judge": "codex",
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "max",
+          "error": null
+        }
+      },
+      {
+        "task_index": 23,
+        "category": "GAIA",
+        "original_score": 1,
+        "score": 1,
+        "judgement": {
+          "score": 1,
+          "reasoning": "The agent reported \u201cbriniest,\u201d which exactly matches the authoritative ground truth and correctly applied the requested tie-break.",
+          "failure_reason": "",
+          "impossible_task": false,
+          "reached_captcha": false,
+          "duration_seconds": 10.767607100002351,
+          "judge": "codex",
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "max",
+          "error": null
+        }
+      },
+      {
+        "task_index": 44,
+        "category": "BrowseComp",
+        "original_score": 1,
+        "score": 1,
+        "judgement": {
+          "score": 1,
+          "reasoning": "The final response gives 15.5 cm and 13.2 cm, exactly matching the ground truth and correctly identifying the dog and cat fleas.",
+          "failure_reason": "",
+          "impossible_task": false,
+          "reached_captcha": false,
+          "duration_seconds": 9.934883900001296,
+          "judge": "codex",
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "max",
+          "error": null
+        }
+      },
+      {
+        "task_index": 56,
+        "category": "OM2W2",
+        "original_score": 0,
+        "score": 1,
+        "judgement": {
+          "score": 1,
+          "reasoning": "The agent provided the correct shelter address, linked the official foster-program page and foster board, and listed three under-six dogs with individual profile links. The screenshots verify photos, descriptions, ages, and foster-board placement for Callie, King, and Marina.",
+          "failure_reason": "",
+          "impossible_task": false,
+          "reached_captcha": false,
+          "duration_seconds": 87.0507961000003,
+          "judge": "codex",
+          "model": "gpt-5.6-luna",
+          "reasoning_effort": "max",
+          "error": null
+        }
+      }
+    ]
+  }
+}

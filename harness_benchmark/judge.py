@@ -49,6 +49,12 @@ navigate the web, operate a browser, call APIs, use plugins, or spawn subagents.
 execution artifacts explicitly supplied by the judge prompt.
 """
 
+# Manifested separately from the system policy because changing which execution fields the
+# judge sees can change a score even when the judging policy itself is byte-identical.
+JUDGE_INPUT_CONTRACT = """task; ground_truth; agent_trajectory; full final_response;
+compact final_answer_marker; technical_error; up to five attached screenshots. Judge the
+full delivered response; the compact marker cannot erase details present there."""
+
 
 @dataclass
 class Judgement:
@@ -60,6 +66,7 @@ class Judgement:
     duration_seconds: float = 0.0
     judge: str = "none"
     model: str = "cli-default"
+    reasoning_effort: str = "cli-default"
     error: str | None = None
 
     def to_json(self) -> dict[str, object]:
@@ -77,6 +84,9 @@ def judge_manifest(spec: AgentSpec | None) -> dict[str, object]:
         ).hexdigest(),
         "workspace_override_sha256": hashlib.sha256(
             JUDGE_WORKSPACE_OVERRIDE.encode()
+        ).hexdigest(),
+        "input_contract_sha256": hashlib.sha256(
+            JUDGE_INPUT_CONTRACT.encode()
         ).hexdigest(),
     }
 
@@ -111,9 +121,13 @@ def _judge_prompt(
 {_truncate(steps) or "No trajectory captured"}
 </agent_trajectory>
 
-<final_result>
+<final_response>
+{_truncate(execution.final_message)}
+</final_response>
+
+<final_answer_marker>
 {_truncate(execution.final_result)}
-</final_result>
+</final_answer_marker>
 
 <technical_error>
 {execution.error or "none"}
@@ -122,6 +136,9 @@ def _judge_prompt(
 The following screenshots are local files from this exact execution. Inspect them when
 available; do not assume they show success merely because they exist:
 {shot_text}
+
+Judge what the user actually received in <final_response>. The marker is a compact
+extraction aid and must not erase correct details that are present in the full response.
 """
 
 
@@ -191,6 +208,13 @@ def _codex_judge_command(
     ]
     if spec.model:
         command.extend(["--model", spec.model])
+    if spec.reasoning_effort:
+        command.extend(
+            [
+                "--config",
+                "model_reasoning_effort=" + json.dumps(spec.reasoning_effort),
+            ]
+        )
     if screenshots:
         command.extend(["--image", *[str(path) for path in screenshots]])
     command.extend(
@@ -224,6 +248,8 @@ def _claude_judge_command(spec: AgentSpec) -> list[str]:
     ]
     if spec.model:
         command.extend(["--model", spec.model])
+    if spec.reasoning_effort:
+        command.extend(["--effort", spec.reasoning_effort])
     return command
 
 
@@ -307,6 +333,7 @@ async def judge_execution(
             duration_seconds=duration,
             judge=judge_spec.name,
             model=judge_spec.model or "cli-default",
+            reasoning_effort=judge_spec.reasoning_effort or "cli-default",
         )
     except Exception as exc:  # noqa: BLE001 - a broken judge must leave an auditable result
         return Judgement(
@@ -314,5 +341,6 @@ async def judge_execution(
             duration_seconds=duration,
             judge=judge_spec.name,
             model=judge_spec.model or "cli-default",
+            reasoning_effort=judge_spec.reasoning_effort or "cli-default",
             error=f"{type(exc).__name__}: {exc}",
         )

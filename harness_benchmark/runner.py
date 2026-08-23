@@ -32,6 +32,7 @@ from .process import (
     subscription_only_env,
     terminate_process_tree,
 )
+from .telemetry import ProcessTelemetrySampler, summarize_cell_telemetry
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
 PROMPT_TEMPLATE_PATH = Path(__file__).resolve().parent / "prompts" / "agent.md"
@@ -107,6 +108,12 @@ class ComparisonConfig:
     output_root: Path
     auth_status: dict[str, dict[str, object]]
     no_interleave: bool = False
+    record_actions: bool = False
+    trace_cdp: bool = False
+    capture_diagnostics: bool = False
+    sample_processes: bool = False
+    process_sample_interval_seconds: float = 1.0
+    search_endpoint: str | None = None
 
 
 def _encrypted_task_file(benchmark: str) -> Path:
@@ -220,15 +227,22 @@ def ordered_harnesses(
 def build_cell_plans(config: ComparisonConfig) -> list[list[CellPlan]]:
     pairs: list[list[CellPlan]] = []
     pair_ordinal = 0
+    harness_names = [name for name in ("v1", "v2") if name in config.harnesses]
+    if not harness_names:
+        raise ValueError("At least one harness must be configured")
     for agent_name in config.agents:
         for repetition in range(config.repeats):
             for task in config.tasks:
                 pair_id = f"{_safe_part(agent_name)}-r{repetition:02d}-t{task.benchmark_index:03d}"
-                order = ordered_harnesses(
-                    config.paired_order,
-                    pair_ordinal=pair_ordinal,
-                    repetition=repetition,
-                    seed=config.seed,
+                order = (
+                    ordered_harnesses(
+                        config.paired_order,
+                        pair_ordinal=pair_ordinal,
+                        repetition=repetition,
+                        seed=config.seed,
+                    )
+                    if len(harness_names) == 2
+                    else harness_names
                 )
                 pairs.append(
                     [
@@ -249,16 +263,135 @@ def build_cell_plans(config: ComparisonConfig) -> list[list[CellPlan]]:
     return pairs
 
 
-def _system_prompt(harness: HarnessSpec, screenshot_dir: Path) -> str:
+def _system_prompt(
+    harness: HarnessSpec,
+    screenshot_dir: Path,
+    *,
+    search_endpoint: str | None = None,
+) -> str:
     template = PROMPT_TEMPLATE_PATH.read_text(encoding="utf-8")
     example = harness.screenshot_example.format(
         path=repr(str(screenshot_dir / "step_001.png"))
     )
+    discovery_guidance = ""
+    if search_endpoint:
+        discovery_guidance = (
+            "- For general web discovery, use the configured HTML search page "
+            f"`{search_endpoint}` through `{harness.command_name}`. Replace `{{query}}` "
+            "with a URL-encoded query, then open primary result pages through the harness. "
+            "The usual public search providers are known to return CAPTCHA or automated-"
+            "query blocks from this benchmark environment.\n"
+        )
     return template.format(
         harness_command=harness.command_name,
         screenshot_dir=str(screenshot_dir),
         screenshot_example=example,
+        discovery_guidance=discovery_guidance,
     )
+
+
+def _benchmark_helper_source(diagnostics_dir: Path | None) -> str:
+    if diagnostics_dir is None:
+        return '"""No benchmark-specific helpers are enabled for this cell."""\n'
+    rendered_dir = json.dumps(str(diagnostics_dir), ensure_ascii=False)
+    return f'''"""Benchmark-owned v2 diagnostics instrumentation.
+
+This captures bounded privacy-safe diagnostics around each bh invocation. It does not
+record URLs, page text, headers, bodies, form values, or screenshot payloads.
+"""
+import json as _benchmark_json
+import os as _benchmark_os
+import time as _benchmark_time
+from pathlib import Path as _BenchmarkPath
+
+_benchmark_diagnostics_dir = _BenchmarkPath({rendered_dir})
+_benchmark_diagnostics_dir.mkdir(parents=True, exist_ok=True)
+_benchmark_started_targets = {{}}
+_benchmark_target_snapshots = []
+_benchmark_closing = False
+
+
+def _benchmark_start_target(tab_obj=None):
+    target = tab_obj or session.tab()
+    target_id = str(target.target_id)
+    if target_id not in _benchmark_started_targets:
+        _benchmark_started_targets[target_id] = target.start_diagnostics()
+    return target
+
+
+def _benchmark_capture_target(target_id):
+    try:
+        target = session.tab(target_id)
+        _benchmark_target_snapshots.append({{
+            "target_id": str(target_id),
+            "diagnostics": target.diagnostics(),
+        }})
+    except Exception as error:
+        _benchmark_target_snapshots.append({{
+            "target_id": str(target_id),
+            "error_class": type(error).__name__,
+        }})
+
+
+_benchmark_original_goto = goto
+def goto(*args, **kwargs):
+    _benchmark_start_target()
+    return _benchmark_original_goto(*args, **kwargs)
+
+
+_benchmark_original_new_tab = new_tab
+def new_tab(*args, **kwargs):
+    target = _benchmark_original_new_tab(*args, **kwargs)
+    _benchmark_start_target(target)
+    return target
+
+
+_benchmark_original_use_tab = use_tab
+def use_tab(*args, **kwargs):
+    target = _benchmark_original_use_tab(*args, **kwargs)
+    _benchmark_start_target(target)
+    return target
+
+
+_benchmark_original_close = session.close
+def _benchmark_close_with_diagnostics():
+    global _benchmark_closing
+    if _benchmark_closing:
+        return _benchmark_original_close()
+    _benchmark_closing = True
+    for target_id in list(_benchmark_started_targets):
+        _benchmark_capture_target(target_id)
+    payload = {{
+        "pid": _benchmark_os.getpid(),
+        "captured_at": round(_benchmark_time.time(), 3),
+        "started": _benchmark_started_targets,
+        "targets": _benchmark_target_snapshots,
+    }}
+    destination = _benchmark_diagnostics_dir / (
+        f"diagnostics-{{_benchmark_os.getpid()}}-{{_benchmark_time.time_ns()}}.json"
+    )
+    temporary = destination.with_suffix(".json.tmp")
+    try:
+        temporary.write_text(
+            _benchmark_json.dumps(payload, separators=(",", ":")), encoding="utf-8"
+        )
+        temporary.replace(destination)
+        journal.write(
+            "note",
+            event="benchmark_diagnostics_captured",
+            target_snapshots=len(_benchmark_target_snapshots),
+        )
+    except OSError:
+        pass
+    return _benchmark_original_close()
+
+
+session.close = _benchmark_close_with_diagnostics
+try:
+    _benchmark_start_target()
+except Exception:
+    pass
+'''
 
 
 def _atomic_json(path: Path, data: object) -> None:
@@ -423,15 +556,33 @@ async def _run_cell(
     screenshots_dir = workspace / "screenshots"
     runtime_dir = cell_dir / "runtime"
     temp_dir = cell_dir / "tmp"
-    for directory in (workspace, screenshots_dir, runtime_dir, temp_dir):
+    diagnostics_dir = cell_dir / "diagnostics"
+    recordings_dir = cell_dir / "recordings"
+    for directory in (
+        workspace,
+        screenshots_dir,
+        runtime_dir,
+        temp_dir,
+        diagnostics_dir,
+        recordings_dir,
+    ):
         directory.mkdir(parents=True, exist_ok=True)
     shutil.copy2(harness.skill, workspace / "SKILL.md")
     shutil.copy2(WORKSPACE_OVERRIDE_PATH, workspace / "AGENTS.override.md")
-    (workspace / "agent_helpers.py").write_text(
-        '"""Intentionally empty: identical isolated helper surface for both harness arms."""\n',
-        encoding="utf-8",
+    helper_source = _benchmark_helper_source(
+        diagnostics_dir
+        if config.capture_diagnostics and plan.harness_name == "v2"
+        else None
     )
-    system_prompt = _system_prompt(harness, screenshots_dir)
+    # v1 discovers agent_helpers.py through BH_AGENT_WORKSPACE. v2 deliberately uses
+    # BH_HELPERS for its editable extension surface, so give it an explicit benchmark-owned
+    # file rather than relying on the workspace convention of the other implementation.
+    (workspace / "agent_helpers.py").write_text(helper_source, encoding="utf-8")
+    benchmark_helpers = cell_dir / "benchmark_helpers.py"
+    benchmark_helpers.write_text(helper_source, encoding="utf-8")
+    system_prompt = _system_prompt(
+        harness, screenshots_dir, search_endpoint=config.search_endpoint
+    )
     (workspace / "benchmark-system-prompt.md").write_text(
         system_prompt, encoding="utf-8"
     )
@@ -448,13 +599,17 @@ async def _run_cell(
         "BH_RUNTIME_DIR": str(runtime_dir),
         "BH_TMP_DIR": str(temp_dir),
         "BH_AGENT_WORKSPACE": str(workspace),
+        "BH_HELPERS": str(benchmark_helpers),
         # Keep v1's optional saved Browser Use cloud credential store outside the
         # benchmark. The file is intentionally absent, so even an accidental cloud
         # administration command cannot recover a globally saved provider key.
         "BH_AUTH_PATH": str(cell_dir / "browser-harness-auth.json"),
         "BH_JOURNAL": str(cell_dir / "harness-journal.jsonl"),
         "BH_JOURNAL_DIR": str(cell_dir),
-        "BH_RECORD": "0",
+        "BH_CDP_TRACE": "1" if config.trace_cdp else "0",
+        "BH_RECORD": "1" if config.record_actions else "0",
+        "BH_RECORDINGS": str(recordings_dir),
+        "BH_RECORDING_KEEP": "1000",
         "BH_DOMAIN_SKILLS": "0",
         "BH_TELEMETRY": "0",
         "BROWSER_HARNESS_TELEMETRY": "0",
@@ -468,12 +623,22 @@ async def _run_cell(
     execution = AgentExecution(error="Agent did not start")
     setup_error: str | None = None
     teardown_errors: list[str] = []
+    telemetry_errors: list[str] = []
     setup_started = time.perf_counter()
     setup_duration = 0.0
     teardown_duration = 0.0
     browser_started = False
     daemon_started = False
     prewarm: dict[str, object] = {}
+    sampler = (
+        ProcessTelemetrySampler(
+            cell_dir / "process-telemetry.jsonl",
+            interval_seconds=config.process_sample_interval_seconds,
+        )
+        if config.sample_processes
+        else None
+    )
+    sampler_started = False
 
     try:
         cdp_url = await browser.start()
@@ -482,6 +647,16 @@ async def _run_cell(
         daemon.env.update(harness_env)
         await daemon.start()
         daemon_started = True
+        if sampler is not None:
+            sampler.add_root("browser", browser.proc.pid if browser.proc else None)
+            sampler.add_root("harness_daemon", daemon.proc.pid if daemon.proc else None)
+            try:
+                await sampler.start()
+                sampler_started = True
+            except Exception as exc:  # noqa: BLE001 - telemetry cannot break the cell
+                telemetry_errors.append(
+                    f"process telemetry start: {type(exc).__name__}: {exc}"
+                )
         code, stdout, stderr, timed_out = await run_captured(
             [str(harness.cli)],
             cwd=workspace,
@@ -509,6 +684,11 @@ async def _run_cell(
             timeout_seconds=config.task_timeout_seconds,
             codex_sandbox=config.codex_sandbox,
             claude_max_turns=config.claude_max_turns,
+            on_process_started=(
+                lambda pid: sampler.add_root("agent", pid)
+                if sampler is not None
+                else None
+            ),
         )
     except asyncio.CancelledError:
         raise
@@ -528,6 +708,13 @@ async def _run_cell(
                 await browser.stop()
             except Exception as exc:  # noqa: BLE001 - preserve the primary cell result
                 teardown_errors.append(f"browser stop: {type(exc).__name__}: {exc}")
+        if sampler_started and sampler is not None:
+            try:
+                await sampler.stop()
+            except Exception as exc:  # noqa: BLE001 - telemetry cannot break the cell
+                telemetry_errors.append(
+                    f"process telemetry stop: {type(exc).__name__}: {exc}"
+                )
         teardown_duration = time.perf_counter() - teardown_started
 
     screenshots = sorted(
@@ -555,6 +742,11 @@ async def _run_cell(
         score = 0
         score_override_reason = "Agent bypassed the selected harness with a web search"
 
+    try:
+        harness_telemetry = summarize_cell_telemetry(cell_dir)
+    except Exception as exc:  # noqa: BLE001 - telemetry cannot break the cell
+        telemetry_errors.append(f"telemetry summary: {type(exc).__name__}: {exc}")
+        harness_telemetry = {"error": telemetry_errors[-1]}
     total_duration = time.perf_counter() - total_started
     result: dict[str, Any] = {
         "schema_version": RESULT_SCHEMA_VERSION,
@@ -596,13 +788,31 @@ async def _run_cell(
             "safety_refusal": _safety_refusal(execution),
             "technical_failure_class": technical_failure,
             "harness_bypass_web_searches": execution.web_searches,
+            "telemetry_capture": {
+                "action_recording": config.record_actions,
+                "cdp_round_trip_trace": config.trace_cdp,
+                "bounded_page_diagnostics": config.capture_diagnostics,
+                "process_tree_sampling": config.sample_processes,
+                "process_sample_interval_seconds": (
+                    config.process_sample_interval_seconds
+                    if config.sample_processes
+                    else None
+                ),
+            },
+            "harness_telemetry": harness_telemetry,
         },
         "execution": execution.to_json(),
         "judgement": judgement.to_json(),
         "setup_error": setup_error,
         "teardown_errors": teardown_errors,
+        "telemetry_errors": telemetry_errors,
         "prewarm": prewarm,
         "screenshots": [str(path.relative_to(cell_dir)) for path in screenshots],
+        "telemetry_artifacts": {
+            "recordings": "recordings",
+            "diagnostics": "diagnostics",
+            "process_samples": "process-telemetry.jsonl",
+        },
     }
     trace = {
         "warning": "Contains decrypted benchmark task content; do not publish.",
@@ -636,22 +846,44 @@ def build_manifest(
         config.judge is not None and config.judge.name == "codex"
     )
     codex_ambient = _codex_ambient_instruction_manifest() if uses_codex else None
+    limits: dict[str, object] = {
+        "task_timeout_seconds": config.task_timeout_seconds,
+        "judge_timeout_seconds": config.judge_timeout_seconds,
+        "codex_sandbox": config.codex_sandbox,
+        "codex_shell_environment": "inherit-all-after-api-credential-stripping",
+        "codex_forced_login_method": "chatgpt",
+        "codex_web_search": "disabled",
+        "ambient_browser_instructions": (
+            "superseded-by-fixed-workspace-and-developer-policy"
+        ),
+        "subagents": "disabled",
+    }
+    if "claude" in config.agents or (
+        config.judge is not None and config.judge.name == "claude"
+    ):
+        limits["claude_max_turns"] = config.claude_max_turns
     fixed_axes = {
         "benchmark": config.benchmark,
         "task_ids": [task.task_id for task in config.tasks],
         "agents": {name: spec.to_manifest() for name, spec in config.agents.items()},
         "browser": config.browser.to_manifest(),
         "judge": judge_manifest(config.judge),
-        "limits": {
-            "task_timeout_seconds": config.task_timeout_seconds,
-            "judge_timeout_seconds": config.judge_timeout_seconds,
-            "claude_max_turns": config.claude_max_turns,
-            "codex_sandbox": config.codex_sandbox,
-            "codex_shell_environment": "inherit-all-after-api-credential-stripping",
-            "codex_forced_login_method": "chatgpt",
-            "codex_web_search": "disabled",
-            "ambient_browser_instructions": "superseded-by-fixed-workspace-and-developer-policy",
-            "subagents": "disabled",
+        "limits": limits,
+        "telemetry": {
+            "action_recording": config.record_actions,
+            "cdp_round_trip_trace": config.trace_cdp,
+            "bounded_page_diagnostics": config.capture_diagnostics,
+            "process_tree_sampling": config.sample_processes,
+            "process_sample_interval_seconds": (
+                config.process_sample_interval_seconds
+                if config.sample_processes
+                else None
+            ),
+            "external_telemetry": "disabled",
+        },
+        "discovery": {
+            "search_endpoint": config.search_endpoint,
+            "delivery": "browser-navigation-through-selected-harness",
         },
         "prompt_template_sha256": prompt_digest,
         "workspace_instruction_override_sha256": workspace_override_digest,
@@ -664,8 +896,14 @@ def build_manifest(
         "schema_version": RESULT_SCHEMA_VERSION,
         "comparison_id": config.comparison_id,
         "created_at": datetime.now(UTC).isoformat(),
+        "run_mode": (
+            "paired-comparison"
+            if set(config.harnesses) == {"v1", "v2"}
+            else "single-harness-telemetry"
+        ),
         "api_policy": {
-            "task_agents": "local Codex CLI and/or local Claude CLI only",
+            "task_agents": "local subscription CLI: "
+            + ", ".join(sorted(config.agents)),
             "judge": "local subscription CLI or none",
             "model_api_keys_removed_from_children": True,
             "browser_provider_credentials_removed_from_children": True,
@@ -689,13 +927,18 @@ def build_manifest(
         "execution": {
             "mode": config.execution_mode,
             "workers": 1 if config.execution_mode == "sequential" else config.workers,
-            "parallel_unit": "independent task pair",
-            "pair_arms_overlap": False,
+            "parallel_unit": (
+                "independent task pair"
+                if len(config.harnesses) == 2
+                else "independent task cell"
+            ),
+            "pair_arms_overlap": False if len(config.harnesses) == 2 else None,
             "repeats": config.repeats,
             "paired_order": config.paired_order,
             "random_seed": config.seed,
             "task_timeout_seconds": config.task_timeout_seconds,
             "judge_timeout_seconds": config.judge_timeout_seconds,
+            "telemetry": fixed_axes["telemetry"],
         },
         "fixed_axes": fixed_axes,
         "fixed_axes_sha256": fixed_digest,
@@ -735,15 +978,62 @@ def _median(values: list[float]) -> float | None:
     return statistics.median(values) if values else None
 
 
+def _task_key(result: dict[str, Any]) -> tuple[int, str]:
+    benchmark = result["provenance"]["benchmark"]
+    return int(benchmark["benchmark_index"]), str(benchmark["task_id"])
+
+
+def _captcha_excluded_task_keys(
+    results: list[dict[str, Any]],
+) -> set[tuple[int, str]]:
+    return {
+        _task_key(result)
+        for result in results
+        if (result.get("judgement") or {}).get("reached_captcha")
+    }
+
+
+def _capability_blocker(
+    result: dict[str, Any], captcha_excluded_tasks: set[tuple[int, str]]
+) -> str | None:
+    if _task_key(result) in captcha_excluded_tasks:
+        return "captcha-task"
+    judgement = result.get("judgement") or {}
+    if judgement.get("impossible_task"):
+        return "impossible-task"
+    return None
+
+
 def build_comparison_report(
     config: ComparisonConfig,
     results: list[dict[str, Any]],
     *,
     wall_clock_seconds: float,
 ) -> dict[str, Any]:
+    paired_mode = set(config.harnesses) == {"v1", "v2"}
+    captcha_excluded_tasks = _captcha_excluded_task_keys(results)
+    task_exclusions: list[dict[str, Any]] = []
+    for task_key in sorted(captcha_excluded_tasks):
+        affected = [result for result in results if _task_key(result) == task_key]
+        sample = affected[0]["provenance"]["benchmark"]
+        task_exclusions.append(
+            {
+                "task_index": task_key[0],
+                "task_id": task_key[1],
+                "category": sample.get("category", "unknown"),
+                "reason": "captcha",
+                "captcha_cells": [
+                    result["cell_id"]
+                    for result in affected
+                    if (result.get("judgement") or {}).get("reached_captcha")
+                ],
+                "observed_cells": len(affected),
+            }
+        )
+
     aggregates: list[dict[str, Any]] = []
     for agent_name in config.agents:
-        for harness_name in ("v1", "v2"):
+        for harness_name in config.harnesses:
             group = [
                 result
                 for result in results
@@ -751,6 +1041,11 @@ def build_comparison_report(
                 and result["provenance"]["harness"]["name"] == harness_name
             ]
             judged = [result for result in group if result.get("score") in (0, 1)]
+            capability_eligible = [
+                result
+                for result in judged
+                if _capability_blocker(result, captcha_excluded_tasks) is None
+            ]
             agent_times = [float(result["timing"]["agent_seconds"]) for result in group]
             total_times = [float(result["timing"]["total_seconds"]) for result in group]
             token_totals: dict[str, int] = {}
@@ -769,6 +1064,28 @@ def build_comparison_report(
                         sum(int(result["score"]) for result in judged) / len(judged)
                         if judged
                         else None
+                    ),
+                    "capability_eligible_runs": len(capability_eligible),
+                    "capability_passes": sum(
+                        int(result["score"]) for result in capability_eligible
+                    ),
+                    "capability_pass_rate": (
+                        sum(int(result["score"]) for result in capability_eligible)
+                        / len(capability_eligible)
+                        if capability_eligible
+                        else None
+                    ),
+                    "capability_mean_agent_seconds": _mean(
+                        [
+                            float(result["timing"]["agent_seconds"])
+                            for result in capability_eligible
+                        ]
+                    ),
+                    "capability_mean_total_seconds": _mean(
+                        [
+                            float(result["timing"]["total_seconds"])
+                            for result in capability_eligible
+                        ]
                     ),
                     "mean_agent_seconds": _mean(agent_times),
                     "median_agent_seconds": _median(agent_times),
@@ -811,8 +1128,9 @@ def build_comparison_report(
             )
 
     paired: dict[str, dict[str, int]] = {}
+    capability_paired: dict[str, dict[str, int]] = {}
     paired_timing: dict[str, dict[str, float | int | None]] = {}
-    for agent_name in config.agents:
+    for agent_name in (config.agents if paired_mode else ()):
         counts = {
             "v1_pass_v2_pass": 0,
             "v1_pass_v2_fail": 0,
@@ -820,13 +1138,24 @@ def build_comparison_report(
             "v1_fail_v2_fail": 0,
             "unjudged_pairs": 0,
         }
+        capability_counts = {
+            "v1_pass_v2_pass": 0,
+            "v1_pass_v2_fail": 0,
+            "v1_fail_v2_pass": 0,
+            "v1_fail_v2_fail": 0,
+            "excluded_task_pairs": 0,
+            "blocked_pairs": 0,
+            "unjudged_pairs": 0,
+        }
         pair_ids = {
             result["pair_id"]
             for result in results
             if result["provenance"]["agent"]["name"] == agent_name
         }
-        agent_deltas: list[float] = []
-        total_deltas: list[float] = []
+        raw_agent_deltas: list[float] = []
+        raw_total_deltas: list[float] = []
+        scored_agent_deltas: list[float] = []
+        scored_total_deltas: list[float] = []
         for pair_id in pair_ids:
             arm_results = {
                 result["provenance"]["harness"]["name"]: result
@@ -834,28 +1163,182 @@ def build_comparison_report(
                 if result["pair_id"] == pair_id
             }
             if set(arm_results) == {"v1", "v2"}:
-                agent_deltas.append(
+                raw_agent_deltas.append(
                     float(arm_results["v2"]["timing"]["agent_seconds"])
                     - float(arm_results["v1"]["timing"]["agent_seconds"])
                 )
-                total_deltas.append(
+                raw_total_deltas.append(
                     float(arm_results["v2"]["timing"]["total_seconds"])
                     - float(arm_results["v1"]["timing"]["total_seconds"])
                 )
+            task_is_excluded = bool(arm_results) and any(
+                _task_key(result) in captcha_excluded_tasks
+                for result in arm_results.values()
+            )
             arms = {name: result.get("score") for name, result in arm_results.items()}
             if arms.get("v1") not in (0, 1) or arms.get("v2") not in (0, 1):
                 counts["unjudged_pairs"] += 1
+                if task_is_excluded:
+                    capability_counts["excluded_task_pairs"] += 1
+                else:
+                    capability_counts["unjudged_pairs"] += 1
                 continue
             left = "pass" if arms["v1"] == 1 else "fail"
             right = "pass" if arms["v2"] == 1 else "fail"
             counts[f"v1_{left}_v2_{right}"] += 1
+            if task_is_excluded:
+                capability_counts["excluded_task_pairs"] += 1
+                continue
+            if any(
+                _capability_blocker(result, captcha_excluded_tasks)
+                for result in arm_results.values()
+            ):
+                capability_counts["blocked_pairs"] += 1
+                continue
+            capability_counts[f"v1_{left}_v2_{right}"] += 1
+            scored_agent_deltas.append(
+                float(arm_results["v2"]["timing"]["agent_seconds"])
+                - float(arm_results["v1"]["timing"]["agent_seconds"])
+            )
+            scored_total_deltas.append(
+                float(arm_results["v2"]["timing"]["total_seconds"])
+                - float(arm_results["v1"]["timing"]["total_seconds"])
+            )
         paired[agent_name] = counts
+        capability_paired[agent_name] = capability_counts
         paired_timing[agent_name] = {
-            "pairs": len(agent_deltas),
-            "mean_agent_seconds_delta_v2_minus_v1": _mean(agent_deltas),
-            "median_agent_seconds_delta_v2_minus_v1": _median(agent_deltas),
-            "mean_total_seconds_delta_v2_minus_v1": _mean(total_deltas),
+            "pairs": len(scored_agent_deltas),
+            "raw_pairs": len(raw_agent_deltas),
+            "mean_agent_seconds_delta_v2_minus_v1": _mean(scored_agent_deltas),
+            "median_agent_seconds_delta_v2_minus_v1": _median(scored_agent_deltas),
+            "mean_total_seconds_delta_v2_minus_v1": _mean(scored_total_deltas),
+            "raw_mean_agent_seconds_delta_v2_minus_v1": _mean(raw_agent_deltas),
+            "raw_mean_total_seconds_delta_v2_minus_v1": _mean(raw_total_deltas),
         }
+
+    order_effects: list[dict[str, Any]] = []
+    for order in sorted(
+        {int(result["provenance"]["benchmark"]["order"]) for result in results}
+    ):
+        group = [
+            result
+            for result in results
+            if int(result["provenance"]["benchmark"]["order"]) == order
+        ]
+        judged = [result for result in group if result.get("score") in (0, 1)]
+        captcha_runs = sum(
+            1 for result in group if result["judgement"].get("reached_captcha")
+        )
+        order_effects.append(
+            {
+                "order": order,
+                "runs": len(group),
+                "judged_runs": len(judged),
+                "passes": sum(int(result["score"]) for result in judged),
+                "pass_rate": (
+                    sum(int(result["score"]) for result in judged) / len(judged)
+                    if judged
+                    else None
+                ),
+                "captcha_runs": captcha_runs,
+                "captcha_rate": captcha_runs / len(group) if group else None,
+                "mean_agent_seconds": _mean(
+                    [float(result["timing"]["agent_seconds"]) for result in group]
+                ),
+            }
+        )
+
+    validity_warnings: list[str] = []
+    if config.repeats < 3:
+        validity_warnings.append(
+            f"Only {config.repeats} repetition(s) were run; treat outcomes as exploratory."
+        )
+    captcha_total = sum(
+        1 for result in results if result["judgement"].get("reached_captcha")
+    )
+    if captcha_total:
+        validity_warnings.append(
+            f"CAPTCHA affected {captcha_total}/{len(results)} cells; "
+            f"{len(task_exclusions)}/{len(config.tasks)} selected tasks were excluded "
+            "from every comparison score."
+        )
+    if config.tasks and len(task_exclusions) == len(config.tasks):
+        validity_warnings.append(
+            "No tasks remain after CAPTCHA exclusion; this run has no benchmark score."
+        )
+    if len(order_effects) >= 2:
+        first, second = order_effects[0], order_effects[1]
+        if (
+            first["captcha_rate"] is not None
+            and second["captcha_rate"] is not None
+            and abs(float(first["captcha_rate"]) - float(second["captcha_rate"]))
+            >= 0.5
+        ):
+            validity_warnings.append(
+                "Strong order confound: CAPTCHA rate was "
+                f"{100 * float(first['captcha_rate']):.1f}% at order {first['order']} and "
+                f"{100 * float(second['captcha_rate']):.1f}% at order {second['order']}."
+            )
+    if paired_mode:
+        comparable_pairs = sum(
+            sum(
+                count
+                for key, count in counts.items()
+                if key.startswith("v1_")
+            )
+            for counts in capability_paired.values()
+        )
+        total_pairs = sum(len(config.tasks) * config.repeats for _ in config.agents)
+        if comparable_pairs < total_pairs:
+            validity_warnings.append(
+                f"Only {comparable_pairs}/{total_pairs} pairs remained "
+                "capability-comparable after task-wide CAPTCHA exclusion and "
+                "impossible-task blocking."
+            )
+
+    category_aggregate: list[dict[str, Any]] = []
+    for category in sorted({task.category for task in config.tasks}):
+        for agent_name in config.agents:
+            for harness_name in config.harnesses:
+                group = [
+                    result
+                    for result in results
+                    if result["provenance"]["benchmark"]["category"] == category
+                    and result["provenance"]["agent"]["name"] == agent_name
+                    and result["provenance"]["harness"]["name"] == harness_name
+                ]
+                eligible = [
+                    result
+                    for result in group
+                    if result.get("score") in (0, 1)
+                    and _capability_blocker(result, captcha_excluded_tasks) is None
+                ]
+                category_aggregate.append(
+                    {
+                        "category": category,
+                        "agent": agent_name,
+                        "harness": harness_name,
+                        "runs": len(group),
+                        "scored_runs": len(eligible),
+                        "passes": sum(int(result["score"]) for result in eligible),
+                        "pass_rate": (
+                            sum(int(result["score"]) for result in eligible)
+                            / len(eligible)
+                            if eligible
+                            else None
+                        ),
+                        "captcha_excluded_tasks": len(
+                            {_task_key(result) for result in group}
+                            & captcha_excluded_tasks
+                        ),
+                        "mean_agent_seconds": _mean(
+                            [
+                                float(result["timing"]["agent_seconds"])
+                                for result in eligible
+                            ]
+                        ),
+                    }
+                )
 
     per_task = [
         {
@@ -867,6 +1350,18 @@ def build_comparison_report(
             "task_id": result["provenance"]["benchmark"]["task_id"],
             "repetition": result["provenance"]["benchmark"]["repetition"],
             "score": result.get("score"),
+            "capability_score": (
+                result.get("score")
+                if _capability_blocker(result, captcha_excluded_tasks) is None
+                else None
+            ),
+            "capability_blocker": _capability_blocker(
+                result, captcha_excluded_tasks
+            ),
+            "excluded_from_scoring": _task_key(result) in captcha_excluded_tasks,
+            "exclusion_reason": (
+                "captcha" if _task_key(result) in captcha_excluded_tasks else None
+            ),
             "setup_seconds": result["timing"]["setup_seconds"],
             "agent_seconds": result["timing"]["agent_seconds"],
             "teardown_seconds": result["timing"]["teardown_seconds"],
@@ -880,80 +1375,220 @@ def build_comparison_report(
             "safety_refusal": result["metrics"].get("safety_refusal"),
             "reached_captcha": result["judgement"].get("reached_captcha"),
             "impossible_task": result["judgement"].get("impossible_task"),
+            "failure_reason": result["judgement"].get("failure_reason"),
+            "judge_error": result["judgement"].get("error"),
+            "harness_telemetry": result["metrics"].get("harness_telemetry"),
         }
         for result in results
     ]
     return {
         "comparison_id": config.comparison_id,
+        "run_mode": (
+            "paired-comparison" if paired_mode else "single-harness-telemetry"
+        ),
         "measurement_scope": config.measurement_scope,
         "wall_clock_seconds": wall_clock_seconds,
         "cells_completed": len(results),
+        "task_scoring": {
+            "policy": (
+                "If any cell reaches CAPTCHA or human verification, exclude the "
+                "entire task across all agents, harnesses, and repetitions."
+            ),
+            "selected_tasks": len(config.tasks),
+            "scored_tasks": len(config.tasks) - len(task_exclusions),
+            "excluded_task_count": len(task_exclusions),
+            "excluded_tasks": task_exclusions,
+        },
         "aggregate": aggregates,
+        "category_aggregate": category_aggregate,
         "paired_outcomes": paired,
+        "capability_paired_outcomes": capability_paired,
         "paired_timing": paired_timing,
+        "order_effects": order_effects,
+        "validity_warnings": validity_warnings,
         "per_task": per_task,
     }
 
 
 def _report_markdown(report: dict[str, Any]) -> str:
+    task_scoring = report["task_scoring"]
     lines = [
-        f"# Browser Harness comparison `{report['comparison_id']}`",
+        f"# Browser Harness run `{report['comparison_id']}`",
         "",
+        f"Mode: **{report['run_mode']}**  ",
         f"Scope: **{report['measurement_scope']}**  ",
         f"Wall clock: **{report['wall_clock_seconds']:.1f}s**  ",
-        f"Cells completed: **{report['cells_completed']}**",
+        f"Cells completed: **{report['cells_completed']}**  ",
+        (
+            f"Scored tasks: **{task_scoring['scored_tasks']} / "
+            f"{task_scoring['selected_tasks']}**  "
+        ),
+        f"CAPTCHA-excluded tasks: **{task_scoring['excluded_task_count']}**",
         "",
-        "| Agent | Harness | Passes | Judged | Pass rate | Mean agent time | Mean total time |",
-        "| --- | --- | ---: | ---: | ---: | ---: | ---: |",
+        "## Validity warnings",
+        "",
+        *[f"- {warning}" for warning in report.get("validity_warnings", [])],
+        "",
+        "## CAPTCHA task exclusions",
+        "",
     ]
+    if task_scoring["excluded_tasks"]:
+        lines.extend(
+            [
+                "| Task | Category | Reason | CAPTCHA cells |",
+                "| ---: | --- | --- | ---: |",
+            ]
+        )
+        for exclusion in task_scoring["excluded_tasks"]:
+            lines.append(
+                f"| {exclusion['task_index']} | {exclusion['category']} | "
+                f"{exclusion['reason']} | {len(exclusion['captcha_cells'])} |"
+            )
+    else:
+        lines.append("No tasks were excluded by the CAPTCHA rule.")
+    lines.extend(
+        [
+            "",
+            "## Scored aggregate",
+            "",
+            "| Agent | Harness | Scored passes | Eligible cells | Scored pass rate | Scored mean agent time | Scored mean total time | Raw audit passes | Raw judged | Raw pass rate |",
+            "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+        ]
+    )
     for row in report["aggregate"]:
         rate = "n/a" if row["pass_rate"] is None else f"{100 * row['pass_rate']:.1f}%"
+        capability_rate = (
+            "n/a"
+            if row["capability_pass_rate"] is None
+            else f"{100 * row['capability_pass_rate']:.1f}%"
+        )
+        capability_agent_time = (
+            "n/a"
+            if row["capability_mean_agent_seconds"] is None
+            else f"{row['capability_mean_agent_seconds']:.1f}s"
+        )
+        capability_total_time = (
+            "n/a"
+            if row["capability_mean_total_seconds"] is None
+            else f"{row['capability_mean_total_seconds']:.1f}s"
+        )
+        lines.append(
+            f"| {row['agent']} | {row['harness']} | {row['capability_passes']} | "
+            f"{row['capability_eligible_runs']} | {capability_rate} | "
+            f"{capability_agent_time} | {capability_total_time} | {row['passes']} | "
+            f"{row['judged_runs']} | {rate} |"
+        )
+    lines.extend(
+        [
+            "",
+            "## Category aggregate",
+            "",
+            "| Category | Agent | Harness | Scored passes | Scored runs | Pass rate | CAPTCHA exclusions | Mean agent time |",
+            "| --- | --- | --- | ---: | ---: | ---: | ---: | ---: |",
+        ]
+    )
+    for row in report["category_aggregate"]:
+        rate = (
+            "n/a"
+            if row["pass_rate"] is None
+            else f"{100 * row['pass_rate']:.1f}%"
+        )
+        mean_agent_time = (
+            "n/a"
+            if row["mean_agent_seconds"] is None
+            else f"{row['mean_agent_seconds']:.1f}s"
+        )
+        lines.append(
+            f"| {row['category']} | {row['agent']} | {row['harness']} | "
+            f"{row['passes']} | {row['scored_runs']} | {rate} | "
+            f"{row['captcha_excluded_tasks']} | "
+            f"{mean_agent_time} |"
+        )
+    if report["paired_outcomes"]:
+        lines.extend(["", "## Raw audit paired outcomes", ""])
+        for agent, counts in report["paired_outcomes"].items():
+            lines.append(
+                f"- {agent}: "
+                + ", ".join(f"{key}={value}" for key, value in counts.items())
+            )
+        lines.extend(["", "## Scored paired outcomes", ""])
+        for agent, counts in report["capability_paired_outcomes"].items():
+            lines.append(
+                f"- {agent}: "
+                + ", ".join(f"{key}={value}" for key, value in counts.items())
+            )
+        lines.extend(["", "## Scored paired timing", ""])
+        for agent, timing in report["paired_timing"].items():
+            agent_delta = timing["mean_agent_seconds_delta_v2_minus_v1"]
+            total_delta = timing["mean_total_seconds_delta_v2_minus_v1"]
+            rendered_agent = "n/a" if agent_delta is None else f"{agent_delta:+.1f}s"
+            rendered_total = "n/a" if total_delta is None else f"{total_delta:+.1f}s"
+            lines.append(
+                f"- {agent}: v2-v1 mean agent time {rendered_agent}; "
+                f"mean total time {rendered_total} ({timing['pairs']} scored pairs; "
+                f"{timing['raw_pairs']} raw audit pairs)"
+            )
+    lines.extend(
+        [
+            "",
+            "## Order diagnostics",
+            "",
+            "| Pair order | Runs | Passes | Pass rate | CAPTCHA runs | CAPTCHA rate | Mean agent time |",
+            "| ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+        ]
+    )
+    for row in report["order_effects"]:
+        rate = "n/a" if row["pass_rate"] is None else f"{100 * row['pass_rate']:.1f}%"
+        captcha_rate = (
+            "n/a"
+            if row["captcha_rate"] is None
+            else f"{100 * row['captcha_rate']:.1f}%"
+        )
         agent_time = (
             "n/a"
             if row["mean_agent_seconds"] is None
             else f"{row['mean_agent_seconds']:.1f}s"
         )
-        total_time = (
-            "n/a"
-            if row["mean_total_seconds"] is None
-            else f"{row['mean_total_seconds']:.1f}s"
-        )
         lines.append(
-            f"| {row['agent']} | {row['harness']} | {row['passes']} | "
-            f"{row['judged_runs']} | {rate} | {agent_time} | {total_time} |"
-        )
-    lines.extend(["", "## Paired outcomes", ""])
-    for agent, counts in report["paired_outcomes"].items():
-        lines.append(
-            f"- {agent}: "
-            + ", ".join(f"{key}={value}" for key, value in counts.items())
-        )
-    lines.extend(["", "## Paired timing", ""])
-    for agent, timing in report["paired_timing"].items():
-        agent_delta = timing["mean_agent_seconds_delta_v2_minus_v1"]
-        total_delta = timing["mean_total_seconds_delta_v2_minus_v1"]
-        rendered_agent = "n/a" if agent_delta is None else f"{agent_delta:+.1f}s"
-        rendered_total = "n/a" if total_delta is None else f"{total_delta:+.1f}s"
-        lines.append(
-            f"- {agent}: v2-v1 mean agent time {rendered_agent}; "
-            f"mean total time {rendered_total} ({timing['pairs']} pairs)"
+            f"| {row['order']} | {row['runs']} | {row['passes']} | {rate} | "
+            f"{row['captcha_runs']} | {captcha_rate} | {agent_time} |"
         )
     lines.extend(
         [
             "",
             "## Per-task results",
             "",
-            "| Task | Rep | Agent | Harness | Score | Agent time | Total time | Failure |",
-            "| ---: | ---: | --- | --- | ---: | ---: | ---: | --- |",
+            "| Task | Rep | Agent | Harness | Raw audit score | Scored score | Agent time | Total time | Invokes | Helpers | CDP | Frames | Failure |",
+            "| ---: | ---: | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
         ]
     )
     for row in report["per_task"]:
         score = "n/a" if row["score"] is None else str(row["score"])
-        failure = row["technical_failure_class"] or ""
+        if row["excluded_from_scoring"]:
+            capability_score = "excluded (captcha task)"
+        elif row["capability_blocker"]:
+            capability_score = f"blocked ({row['capability_blocker']})"
+        elif row["capability_score"] is None:
+            capability_score = "n/a"
+        else:
+            capability_score = str(row["capability_score"])
+        failure = (
+            row["technical_failure_class"]
+            or row["judge_error"]
+            or row["failure_reason"]
+            or ""
+        )
+        failure = str(failure).replace("|", "\\|").replace("\n", " ")
+        telemetry = row.get("harness_telemetry") or {}
+        invokes = (telemetry.get("invocations") or {}).get("count", 0)
+        helpers = (telemetry.get("helpers") or {}).get("calls", 0)
+        protocol = (telemetry.get("protocol") or {}).get("calls", 0)
+        frames = (telemetry.get("recordings") or {}).get("frames", 0)
         lines.append(
             f"| {row['task_index']} | {row['repetition']} | {row['agent']} | "
-            f"{row['harness']} | {score} | {row['agent_seconds']:.1f}s | "
-            f"{row['total_seconds']:.1f}s | {failure} |"
+            f"{row['harness']} | {score} | {capability_score} | "
+            f"{row['agent_seconds']:.1f}s | {row['total_seconds']:.1f}s | "
+            f"{invokes} | {helpers} | {protocol} | {frames} | {failure} |"
         )
     lines.append("")
     return "\n".join(lines)

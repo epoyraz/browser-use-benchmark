@@ -203,6 +203,7 @@ Extend the public runner with:
 - `--repeats N`;
 - `--paired-order fixed|alternate|randomized`;
 - `--judge-model`;
+- `--codex-effort`, `--claude-effort`, and `--judge-effort`;
 - optionally `--task-category` or a reviewed task-capability filter.
 
 Resolve the task indices once, then run both harnesses for every task and repetition.
@@ -280,7 +281,9 @@ uv run python run_harness_comparison.py \
 Use `--execution-mode sequential` (the default) or `--parallel N`. Parallelism is
 applied to independent task pairs; the v1 and v2 arms of one pair never overlap.
 `--codex-model`, `--claude-model`, and `--judge-model` override CLI defaults without
-changing the saved-login authentication path.
+changing the saved-login authentication path. The corresponding `--codex-effort`,
+`--claude-effort`, and `--judge-effort` options make reasoning effort explicit in the
+commands and manifest.
 
 The runner prints the fully resolved comparison manifest and requires explicit
 confirmation or a `--yes` flag if either checkout is dirty, unpinned, or does not
@@ -338,6 +341,15 @@ Also report:
 - technical failure class;
 - safety refusal count;
 - captcha and impossible-task counts.
+
+For read-only capability reports, retain strict scores only for auditability. If any cell
+reaches CAPTCHA or human verification, exclude that entire task from scored aggregates,
+paired outcomes, and paired timing across all agents, harnesses, and repetitions in the
+run. This avoids retaining clean cells from a task whose accessibility changed during the
+experiment. Impossible-task blockers remain excluded at the affected pair level. Report
+excluded task identifiers, outcomes by within-pair order, and the judge's failure reason.
+A concentrated blocker rate in the second arm is an experimental-validity warning, not
+evidence that the corresponding harness is worse.
 
 Aggregate averages alone are insufficient because live websites and model sampling are
 noisy. Use at least three repetitions for a report intended to support a product claim.
