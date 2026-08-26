@@ -32,6 +32,24 @@
 
 <br/>
 
+## BU Bench V2
+
+**200 web tasks scored against weighted findings rubrics**
+
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="official_plots/bu_bench_v2_light.png">
+  <source media="(prefers-color-scheme: dark)" srcset="official_plots/bu_bench_v2_dark.png">
+  <img alt="BU Bench V2 - Mean score against cost per task" src="official_plots/bu_bench_v2_light.png" width="100%">
+</picture>
+
+Results are from an earlier 60-task cut of this benchmark.
+
+<br/>
+
+---
+
+<br/>
+
 ## Stealth Bench V1
 
 **71 tasks for evaluating browser stealth across anti-bot protections**
