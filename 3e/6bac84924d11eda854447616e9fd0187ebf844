@@ -1,0 +1,20 @@
+docs/browser-harness-v1-v2-feasibility.md
+  s_17770bca771a25::t_085001c5a1426e 3-6
+  s_17770bca771a25::t_ccb9d4c74f6340 1-2,7-391
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "3e6bac84924d11eda854447616e9fd0187ebf844",
+  "prompts": {},
+  "sessions": {
+    "s_17770bca771a25": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a02a3c-b106-7c12-85b3-86a76ada62b4",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    }
+  }
+}
