@@ -1,0 +1,44 @@
+docs/browser-harness-v1-v2-feasibility.md
+  s_17770bca771a25::t_085001c5a1426e 4-6
+  s_17770bca771a25::t_ccb9d4c74f6340 1-2,9-21,24-27,37-116,118-120,124,126-128,130-144,146-162,166,168-172,174-178,182-205,207-232,234-251,253,256-257,269-271,275-276,279-280,287,289-337,340-344,354-358,364-365,368-375,377,379-380,392,395-431
+frameworks/__init__.py
+  s_f70a2282cb38cf::t_ddd5e852663d4a 127-133
+frameworks/bh_harness/system_prompt_v1.md
+  s_f70a2282cb38cf::t_12de192959613d 1-16
+frameworks/bh_harness/system_prompt_v2.md
+  s_f70a2282cb38cf::t_d22818207d19fb 1-16
+frameworks/bh_harness/compare.py
+  s_f70a2282cb38cf::t_6f8583174fe564 22-34,36,39,43-51,61-68,70-72,74-78
+  s_f70a2282cb38cf::t_b7188bddef1a76 1-21,35,37-38,40-42,52-60,69,73,79-111
+frameworks/bh_harness/README.md
+  s_f70a2282cb38cf::t_40996ddb36fcc2 1-77
+frameworks/bh_harness/run_task.py
+  s_f70a2282cb38cf::t_56368bc400cf15 1-232,238-487
+  s_f70a2282cb38cf::t_af7d68ca16448f 233-237
+run_framework_eval.py
+  s_f70a2282cb38cf::t_ddd5e852663d4a 37-41
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.23",
+  "base_commit_sha": "7897bf9c4033bed26ad3a467047d83a1b9882b6f",
+  "prompts": {},
+  "sessions": {
+    "s_17770bca771a25": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a02a3c-b106-7c12-85b3-86a76ada62b4",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": null
+    },
+    "s_f70a2282cb38cf": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6246e4e6-aad4-4417-bc0f-7582673813a7",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Enes Poyraz <epoyraz.eth@googlemail.com>"
+    }
+  }
+}
