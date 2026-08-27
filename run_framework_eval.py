@@ -34,6 +34,11 @@ Adapter prerequisites:
     claude-code-harness, codex-harness, pi-harness:
         Install the agent CLI, clone browser-use/browser-harness at the desired
         ref to /tmp/browser-harness, and install it into the uv environment.
+    bh-harness:
+        Install Codex CLI. Check out browser-harness v2 (and v1, for the control
+        arm) with their own venvs; point at them with params harness_dir /
+        harness_v1_dir. Chrome is launched per task locally, so no browser
+        provider key is needed. Select the arm with --params harness=v1|v2.
     claude-code-harness-js:
         Install Claude Code, clone/install browser-use/browser-harness-js, and
         put browser-harness-js on PATH.

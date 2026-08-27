@@ -124,6 +124,13 @@ FRAMEWORKS: dict[str, FrameworkInfo] = {
     "codex-harness": FrameworkInfo(
         browsers=["browser-use-cloud"], repo="browser-use/browser-harness"
     ),
+    "bh-harness": FrameworkInfo(
+        browsers=["local-scratch"],
+        repo="browser-use/browser-harness",
+        notes="Codex CLI + browser-harness v2, with v1 as the control via params "
+              "harness=v1. Both arms are pinned to one scratch Chrome per task, so the "
+              "harness is the only variable. Local checkouts; no provider key.",
+    ),
     "pi-harness": FrameworkInfo(
         browsers=["browser-use-cloud"], repo="browser-use/browser-harness"
     ),
