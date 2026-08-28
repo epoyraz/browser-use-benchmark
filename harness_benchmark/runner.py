@@ -11,6 +11,7 @@ import random
 import re
 import shutil
 import statistics
+import tempfile
 import time
 import uuid
 from collections.abc import Mapping
@@ -545,6 +546,34 @@ def _safety_refusal(execution: AgentExecution) -> bool:
     return any(pattern.search(text) for pattern in _SAFETY_PATTERNS)
 
 
+#: AF_UNIX caps a socket path at 104 bytes on macOS and 108 on Linux; take the smaller.
+_SOCKET_PATH_LIMIT = 104
+
+
+def _runtime_dir(cell_id: str, daemon_name: str) -> Path:
+    """A short home for the daemon's `.sock`/`.port`, outside the deep run tree.
+
+    `run_data/harness_comparisons/<comparison>/cells/<cell_id>/runtime/<daemon>.sock` is
+    around 175 bytes, well past the AF_UNIX limit. v2 fails closed and says so exactly; v1
+    would bind a silently truncated path instead, which is the worse of the two.
+
+    Nothing archival is written here — the runner only globs for endpoints and removes
+    them at teardown — so moving it out of the cell directory costs no evidence.
+    """
+    digest = hashlib.sha256(cell_id.encode()).hexdigest()[:10]
+    budget = _SOCKET_PATH_LIMIT - len(f"/{daemon_name}.sock".encode())
+    roots = [Path(tempfile.gettempdir())]
+    if os.name != "nt":
+        roots.append(Path("/tmp"))          # shorter, and the fallback the error suggests
+    for root in roots:
+        candidate = root / f"bh-rt-{digest}"
+        if len(str(candidate).encode()) <= budget:
+            return candidate
+    raise RuntimeError(
+        f"no temporary directory leaves room for a {_SOCKET_PATH_LIMIT}-byte socket path "
+        f"with daemon name {daemon_name!r}")
+
+
 async def _run_cell(
     config: ComparisonConfig, plan: CellPlan, run_dir: Path
 ) -> dict[str, Any]:
@@ -554,7 +583,12 @@ async def _run_cell(
     cell_dir = run_dir / "cells" / plan.cell_id
     workspace = cell_dir / "workspace"
     screenshots_dir = workspace / "screenshots"
-    runtime_dir = cell_dir / "runtime"
+    daemon_name = _safe_part(
+        f"{config.comparison_id[-8:]}-{plan.harness_name}-{plan.agent_name[:2]}-"
+        f"r{plan.repetition}-t{plan.task.benchmark_index}",
+        limit=64,
+    )
+    runtime_dir = _runtime_dir(plan.cell_id, daemon_name)
     temp_dir = cell_dir / "tmp"
     diagnostics_dir = cell_dir / "diagnostics"
     recordings_dir = cell_dir / "recordings"
@@ -587,11 +621,6 @@ async def _run_cell(
         system_prompt, encoding="utf-8"
     )
 
-    daemon_name = _safe_part(
-        f"{config.comparison_id[-8:]}-{plan.harness_name}-{plan.agent_name[:2]}-"
-        f"r{plan.repetition}-t{plan.task.benchmark_index}",
-        limit=64,
-    )
     path_value = os.pathsep.join([str(harness.cli.parent), os.environ.get("PATH", "")])
     harness_env: dict[str, str] = {
         "PATH": path_value,
@@ -703,6 +732,8 @@ async def _run_cell(
                 teardown_errors.extend(await daemon.finish(runtime_dir))
             except Exception as exc:  # noqa: BLE001 - continue with browser cleanup
                 teardown_errors.append(f"daemon stop: {type(exc).__name__}: {exc}")
+            # It is outside the cell directory now, so nothing else will collect it.
+            shutil.rmtree(runtime_dir, ignore_errors=True)
         if browser_started or browser.proc is not None:
             try:
                 await browser.stop()

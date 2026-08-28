@@ -285,7 +285,12 @@ def resolve_harness(
         name=name,
         root=path,
         cli=cli.resolve(),
-        python=python.resolve(),
+        # `.absolute()`, never `.resolve()`: a venv's `bin/python` is a symlink to the base
+        # interpreter, so resolving it hands back a Python that cannot import the harness.
+        # v1 launches its daemon as `python -m browser_harness.daemon`, which then died
+        # with ModuleNotFoundError before a single task ran — the venv was defeated by the
+        # act of naming it precisely.
+        python=Path(os.path.abspath(python)),
         skill=skill.resolve(),
         git_sha=git_sha,
         package_version=package_version,
